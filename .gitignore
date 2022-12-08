@@ -1,1 +1,10 @@
+.vscode/
+.idea/
+.vs/
+
+*.swp
+
+.env
+
+.cargo/
 /target
