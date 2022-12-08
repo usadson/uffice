@@ -8,6 +8,8 @@ pub struct TextSettings {
     pub bold: bool,
     pub font: String,
     pub color: Color,
+
+    pub spacing_below_paragraph: f32,
 }
 
 impl TextSettings {
@@ -16,6 +18,7 @@ impl TextSettings {
             bold: false,
             font,
             color: Color::BLACK,
+            spacing_below_paragraph: 0.0f32
         }
     }
 
