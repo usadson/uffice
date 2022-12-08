@@ -1,9 +1,10 @@
-/**
- * Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
- * All Rights Reserved.
- */
+// Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
+// All Rights Reserved.
 
+mod color_parser;
 mod font;
+mod text_settings;
+mod word_processing;
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -15,49 +16,13 @@ use dotenv;
 use roxmltree as xml;
 
 use sfml::graphics::*;
-use sfml::system::*;
 use sfml::window::*;
 
 //use font_kit;
 use notify::{Watcher, RecursiveMode};
-
-#[derive(Clone)]
-struct TextSettings {
-    pub bold: bool,
-    pub font: String,
-    pub color: Color,
-}
-
-impl TextSettings {
-    fn new(font: String) -> Self {
-        Self{ 
-            bold: false,
-            font,
-            color: Color::BLACK,
-        }
-    }
-
-    fn resolve_font_file(self: &Self) -> String {
-        println!("Font is \"{}\"", self.font);
-        if self.font == "Times New Roman" {
-            return String::from("C:/Windows/Fonts/times.ttf");
-        }
-
-        if self.bold {
-            return String::from("C:/Windows/Fonts/calibrib.ttf");
-        }
-
-        String::from("C:/Windows/Fonts/calibri.ttf")
-    }
-
-    fn create_style(self: &Self) -> TextStyle {
-        if self.bold {
-            return TextStyle::BOLD;
-        }
-
-        TextStyle::REGULAR
-    }
-}
+use text_settings::TextSettings;
+use word_processing::QUALITY;
+use word_processing::QUALITY_PIXELS;
 
 fn apply_run_properties_for_paragraph_mark(element: &xml::Node, text_settings: &mut TextSettings) {
     for run_property in element.children() {
@@ -71,7 +36,7 @@ fn apply_run_properties_for_paragraph_mark(element: &xml::Node, text_settings: &
                 for attr in run_property.attributes() {
                     println!("│  │  │  ├─ Color Attribute: {} => {}", attr.name(), attr.value());
                     if attr.name() == "val" {
-                        text_settings.color = parse_color(attr.value()).unwrap();
+                        text_settings.color = color_parser::parse_color(attr.value()).unwrap();
                     }
                 }
             }
@@ -87,57 +52,6 @@ fn apply_run_properties_for_paragraph_mark(element: &xml::Node, text_settings: &
         }
     }
 }
-
-#[derive(Debug)]
-enum ColorParseError {
-    LengthNotSixBytes,
-    ElementNotHexCharacter,
-}
-
-fn parse_color_element_hex_character(c: u8) -> Result<u8, ColorParseError> {
-    const DIGIT_0: u8 = 0x30;
-    const DIGIT_9: u8 = 0x39;
-
-    const ALPHA_UPPER_A: u8 = 0x41;
-    const ALPHA_UPPER_F: u8 = 0x46;
-
-    const ALPHA_LOWER_A: u8 = 0x61;
-    const ALPHA_LOWER_F: u8 = 0x66;
-
-    if c >= DIGIT_0 && c <= DIGIT_9 {
-        return Ok(c - DIGIT_0);
-    }
-
-    if c >= ALPHA_UPPER_A && c <= ALPHA_UPPER_F {
-        return Ok(c - ALPHA_UPPER_A + 0xA);
-    }
-
-    if c >= ALPHA_LOWER_A && c <= ALPHA_LOWER_F {
-        return Ok(c - ALPHA_LOWER_A + 0xA);
-    }
-
-    Err(ColorParseError::ElementNotHexCharacter)
-}
-
-fn parse_color_element(a: u8, b: u8) -> Result<u8, ColorParseError> {
-    Ok(parse_color_element_hex_character(a)? << 4 | parse_color_element_hex_character(b)?)
-}
-
-fn parse_color(value: &str) -> Result<Color, ColorParseError> {
-    if value.len() != 6 {
-        return Err(ColorParseError::LengthNotSixBytes);
-    }
-
-    Ok(Color::rgb(
-        parse_color_element(value.as_bytes()[0], value.as_bytes()[1])?,
-        parse_color_element(value.as_bytes()[2], value.as_bytes()[3])?,
-        parse_color_element(value.as_bytes()[4], value.as_bytes()[5])?
-    ))
-}
-
-const WORD_PROCESSING_XML_NAMESPACE: &'static str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-const QUALITY: u32 = 8;
-const QUALITY_PIXELS: u32 = QUALITY * 4;
 
 // A4: 210 × 297
 fn draw_document(archive_path: &str) -> RenderTexture {
@@ -162,83 +76,19 @@ fn draw_document(archive_path: &str) -> RenderTexture {
     let mut render_texture = RenderTexture::new(210 * QUALITY_PIXELS, 297 * QUALITY_PIXELS)
         .expect("Failed to create RenderTexture");
 
-    let factor = QUALITY_PIXELS as f32;
-
     render_texture.clear(Color::WHITE);
 
-    let mut position = Vector2f::new(20.0 * factor, 20.0 * factor);
-
-    let text_settings = TextSettings::new(String::from("Calibri"));
-
-    for paragraph in document.descendants() {
-        println!("{}", paragraph.tag_name().name());
-        if paragraph.tag_name().name() != "p" {
-            continue;
-        }
-
-        let mut paragraph_text_settings = text_settings.clone();
-
-        for paragraph_child in paragraph.children() {
-            println!("├─ {}", paragraph_child.tag_name().name());
-            // Paragraph Properties section 17.3.1.26
-            if paragraph_child.tag_name().name() == "pPr" {
-                let paragraph_properties = paragraph_child;
-
-                for paragraph_property in paragraph_properties.children() {
-                    println!("│  ├─ {}", paragraph_property.tag_name().name());
-                    // Run Properties section 17.3.2.28
-                    if paragraph_property.tag_name().name() == "rPr" {
-                       apply_run_properties_for_paragraph_mark(&paragraph_property, &mut paragraph_text_settings); 
-                    }
-                }
-            }
-
-            // Text Run
-            if paragraph_child.tag_name().name() == "r" {
-                let text_run = paragraph_child;
-
-                let mut run_text_settings = paragraph_text_settings.clone();
-
-                for text_run_property in text_run.children() {
-                    println!("│  ├─ {}", text_run_property.tag_name().name());
-
-                    if text_run_property.tag_name().name() == "rPr" {
-                        apply_run_properties_for_paragraph_mark(&text_run_property, &mut run_text_settings);
-                    }
-
-                    if text_run_property.tag_name().name() == "t" {
-                        for child in text_run_property.children() {
-                            if child.node_type() == xml::NodeType::Text {
-                                let font = Font::from_file(&run_text_settings.resolve_font_file())
-                                    .expect("Failed to load font");
-                                
-
-                                let mut text = Text::new(child.text().unwrap(), &font, 30 * QUALITY);
-                                text.set_fill_color(Color::BLACK);
-                                text.set_position(position);
-                                text.set_style(run_text_settings.create_style());
-                                text.set_fill_color(run_text_settings.color);
-
-                                position.x += text.local_bounds().width;
-
-                                println!("Text: {}", child.text().unwrap());
-                                render_texture.draw(&text);
-                            }
-                        } 
-                    }       
-                }
-            }
-        }
-
-
-    }
+    word_processing::process_document(&document, &mut render_texture);
 
     render_texture.display();
     render_texture.set_smooth(true);
     return render_texture;
 }
+
 struct Application {
     archive_path: String,
+
+    #[allow(dead_code)]
     watcher: notify::ReadDirectoryChangesWatcher,
 
     window: RenderWindow,
