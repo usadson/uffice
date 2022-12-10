@@ -19,15 +19,15 @@ fn parse_color_element_hex_character(c: u8) -> Result<u8, ColorParseError> {
     const ALPHA_LOWER_A: u8 = 0x61;
     const ALPHA_LOWER_F: u8 = 0x66;
 
-    if c >= DIGIT_0 && c <= DIGIT_9 {
+    if (DIGIT_0..=DIGIT_9).contains(&c) {
         return Ok(c - DIGIT_0);
     }
 
-    if c >= ALPHA_UPPER_A && c <= ALPHA_UPPER_F {
+    if (ALPHA_UPPER_A..=ALPHA_UPPER_F).contains(&c) {
         return Ok(c - ALPHA_UPPER_A + 0xA);
     }
 
-    if c >= ALPHA_LOWER_A && c <= ALPHA_LOWER_F {
+    if (ALPHA_LOWER_A..=ALPHA_LOWER_F).contains(&c) {
         return Ok(c - ALPHA_LOWER_A + 0xA);
     }
 

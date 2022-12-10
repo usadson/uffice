@@ -101,7 +101,7 @@ impl TextSettings {
         String::from("C:/Windows/Fonts/calibri.ttf")
     }
 
-    pub fn create_text<'a>(self: &Self, font: &'a Font) -> Text<'a> {
+    pub fn create_text<'a>(&self, font: &'a Font) -> Text<'a> {
         let character_size = match self.non_complex_text_size {
             Some(size) => size as f32 * HALF_POINT,
             None => panic!("No default text size defined!")
@@ -114,7 +114,7 @@ impl TextSettings {
         text
     }
 
-    pub fn create_style(self: &Self) -> TextStyle {
+    pub fn create_style(&self) -> TextStyle {
         match self.bold {
             None => TextStyle::REGULAR,
             Some(bold) => match bold {

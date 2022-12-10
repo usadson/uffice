@@ -5,19 +5,19 @@ use roxmltree as xml;
 
 #[derive(Debug)]
 pub enum Error {
-    XmlError(xml::Error),
-    ParseIntError(std::num::ParseIntError),
+    RoXmlTree(xml::Error),
+    StdNumParseInt(std::num::ParseIntError),
     StyleNotFound,
 }
 
 impl From<xml::Error> for Error {
     fn from(error: xml::Error) -> Self {
-        Self::XmlError(error)
+        Self::RoXmlTree(error)
     }
 }
 
 impl From<std::num::ParseIntError> for Error {
     fn from(error: std::num::ParseIntError) -> Self {
-        Self::ParseIntError(error)
+        Self::StdNumParseInt(error)
     }
 }

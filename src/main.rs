@@ -14,8 +14,6 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
-use dotenv;
-
 use roxmltree as xml;
 
 use sfml::graphics::*;
@@ -27,7 +25,7 @@ use notify::{Watcher, RecursiveMode};
 use style::StyleManager;
 use text_settings::TextSettings;
 
-pub const WORD_PROCESSING_XML_NAMESPACE: &'static str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+pub const WORD_PROCESSING_XML_NAMESPACE: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
 fn apply_run_properties_for_paragraph_mark(element: &xml::Node, text_settings: &mut TextSettings) {
     assert_eq!(element.tag_name().name(), "rPr");
@@ -72,7 +70,7 @@ fn apply_run_properties_for_paragraph_mark(element: &xml::Node, text_settings: &
     }
 }
 
-fn load_archive_file_to_string<'a>(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Rc<String> {
+fn load_archive_file_to_string(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Rc<String> {
     let zip_document = archive.by_name(name).expect("Not a DOCX file");
     Rc::new(std::io::read_to_string(zip_document)
             .expect("Failed to read"))
@@ -140,11 +138,11 @@ impl Application {
             archive_path: archive_path.clone(),
             watcher,
             window,
-            is_draw_invalidated: is_draw_invalidated.clone(),
+            is_draw_invalidated,
         }
     }
 
-    fn run(self: &mut Self) {
+    fn run(&mut self) {
         let mut texture = sfml::graphics::RenderTexture::new(1, 1).unwrap();
 
         while self.window.is_open() {

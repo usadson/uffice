@@ -28,13 +28,10 @@ impl Style {
                 continue;
             }
 
-            match element.attribute((WORD_PROCESSING_XML_NAMESPACE, "styleId")) {
-                Some(id) => {
-                    if id == name {
-                        return Self::from_xml(manager, &element)
-                    }
+            if let Some(id) = element.attribute((WORD_PROCESSING_XML_NAMESPACE, "styleId")) {
+                if id == name {
+                    return Self::from_xml(manager, &element)
                 }
-                None => ()
             }
         }
 
@@ -78,7 +75,7 @@ impl Style {
         Ok(style)
     } 
 
-    fn inherit_from(self: &mut Self, style: &Style) {
+    fn inherit_from(&mut self, style: &Style) {
         self.text_settings = style.text_settings.clone();
     }
 
@@ -150,7 +147,7 @@ impl StyleManager {
         Ok(manager)
     }
 
-    fn find_style_using_document(self: &mut Self, name: &str, document: &xml::Document) -> Result<&Style, Error> {
+    fn find_style_using_document(&mut self, name: &str, document: &xml::Document) -> Result<&Style, Error> {
         if !self.styles.contains_key(name) {
             let style = Style::from_document_by_style_id(self, document, name)?;
 
@@ -160,7 +157,7 @@ impl StyleManager {
         Ok(self.find_style(name).unwrap())
     }
 
-    fn find_style(self: &Self, name: &str) -> Option<&Style> {
+    fn find_style(&self, name: &str) -> Option<&Style> {
         self.styles.get(name)
     }
 
@@ -170,7 +167,7 @@ impl StyleManager {
         }
     }
 
-    pub fn default_text_settings(&self) -> &TextSettings {
-        &self.default_text_settings
+    pub fn default_text_settings(&self) -> TextSettings {
+        self.default_text_settings.clone()
     }
 }
