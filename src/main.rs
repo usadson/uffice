@@ -6,6 +6,7 @@ mod font;
 mod text_settings;
 mod word_processing;
 
+use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -16,17 +17,16 @@ use dotenv;
 use roxmltree as xml;
 
 use sfml::graphics::*;
+use sfml::system::Vector2f;
 use sfml::window::*;
 
 //use font_kit;
 use notify::{Watcher, RecursiveMode};
 use text_settings::TextSettings;
-use word_processing::QUALITY;
-use word_processing::QUALITY_PIXELS;
 
 fn apply_run_properties_for_paragraph_mark(element: &xml::Node, text_settings: &mut TextSettings) {
     for run_property in element.children() {
-        println!("│  │  ├─ {}", run_property.tag_name().name());
+        println!("│  │  │  ├─ {}", run_property.tag_name().name());
         match run_property.tag_name().name() {
             "b" => {
                 println!("Set to bold: was={} new={}", text_settings.bold, !text_settings.bold);
@@ -34,7 +34,7 @@ fn apply_run_properties_for_paragraph_mark(element: &xml::Node, text_settings: &
             }
             "color" => {
                 for attr in run_property.attributes() {
-                    println!("│  │  │  ├─ Color Attribute: {} => {}", attr.name(), attr.value());
+                    println!("│  │  │  │  ├─ Color Attribute: {} => {}", attr.name(), attr.value());
                     if attr.name() == "val" {
                         text_settings.color = color_parser::parse_color(attr.value()).unwrap();
                     }
@@ -42,9 +42,19 @@ fn apply_run_properties_for_paragraph_mark(element: &xml::Node, text_settings: &
             }
             "rFonts" => {
                 for attr in run_property.attributes() {
-                    println!("│  │  │  ├─ Font Attribute: {} => {}", attr.name(), attr.value());
+                    println!("│  │  │  │  ├─ Font Attribute: {} => {}", attr.name(), attr.value());
                     if attr.name() == "ascii" {
                         text_settings.font = String::from(attr.value());
+                    }
+                }
+            }
+            "sz" => {
+                for attr in run_property.attributes() {
+                    println!("│  │  │  │  ├─ Size Attribute: {} => {}", attr.name(), attr.value());
+                    if attr.name() == "val" {
+                        let new_value = str::parse::<u32>(attr.value()).expect("Failed to parse attribute");
+                        println!("│  │  │  │  ├─ Value Attribute: old={} new={}", text_settings.non_complex_text_size, new_value);
+                        text_settings.non_complex_text_size = new_value;
                     }
                 }
             }
@@ -73,16 +83,7 @@ fn draw_document(archive_path: &str) -> RenderTexture {
     let document = xml::Document::parse(&document_text)
         .expect("Failed to parse document");
 
-    let mut render_texture = RenderTexture::new(210 * QUALITY_PIXELS, 297 * QUALITY_PIXELS)
-        .expect("Failed to create RenderTexture");
-
-    render_texture.clear(Color::WHITE);
-
-    word_processing::process_document(&document, &mut render_texture);
-
-    render_texture.display();
-    render_texture.set_smooth(true);
-    return render_texture;
+    word_processing::process_document(&document)
 }
 
 struct Application {
@@ -135,6 +136,20 @@ impl Application {
                 while let Some(event) = self.window.poll_event() {
                     match event {
                         Event::Closed => self.window.close(),
+                        Event::Resized { width, height } => {
+                            //self.is_draw_invalidated.store(true, Ordering::Relaxed);
+                            
+                            self.window.set_view(View::new(
+                                Vector2f::new(
+                                    width as f32 / 2.0,
+                                    height as f32 / 2.0
+                                ),
+                                Vector2f::new(
+                                    width as f32,
+                                    height as f32
+                                )
+                            ).deref());
+                        }
                         _ => (),
                     }
                 }
@@ -153,10 +168,14 @@ impl Application {
                 // atm.
 
                 let mut sprite = Sprite::with_texture(texture.texture());
-    
-                let factor = 1.0 / (QUALITY as f32);
-                let centered_x = ((self.window.size().x as f32) - (sprite.texture_rect().width as f32) * factor) / 2.0;
-                sprite.set_scale((factor, factor));
+
+                let full_size = self.window.size().x as f32;
+                let page_size = sprite.texture_rect().width as f32;
+                let factor = 1.0 / 5.0 * 4.0;
+
+                let scale = full_size * factor / page_size;
+                let centered_x = (full_size - page_size * scale) / 2.0;
+                sprite.set_scale((scale, scale));
             
                 sprite.set_position((
                     centered_x,
