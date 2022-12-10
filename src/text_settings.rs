@@ -91,23 +91,22 @@ impl TextSettings {
     }
 
     pub fn resolve_font_file(&self) -> String {
-        match &self.font {
-            Some(font) => {
-                // println!("Font is \"{}\"", font);
-                if font == "Times New Roman" {
-                    return String::from("C:/Windows/Fonts/times.ttf");
-                }
+        let font: &str = match &self.font {
+            Some(font) => font,
+            None => "Calibri"
+        };
 
-                if let Some(bold) = self.bold {
-                    if bold {
-                        return String::from("C:/Windows/Fonts/calibrib.ttf");
-                    }
+        match font {
+            "Calibri" => {
+                if self.bold.unwrap_or(false) {
+                    String::from("C:/Windows/Fonts/calibrib.ttf")
+                } else {
+                    String::from("C:/Windows/Fonts/calibri.ttf")
                 }
             }
-            None => ()
+            "Times New Roman" => String::from("C:/Windows/Fonts/times.ttf"),
+            _ => String::from("C:/Windows/Fonts/calibri.ttf")
         }
-
-        String::from("C:/Windows/Fonts/calibri.ttf")
     }
 
     pub fn create_text<'a>(&self, font: &'a Font) -> Text<'a> {

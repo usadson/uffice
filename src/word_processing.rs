@@ -294,14 +294,17 @@ fn process_text_element(context: &mut Context,
                         position: Vector2f, 
                         run_text_settings: &TextSettings) -> Vector2f {
     let mut position = position;
-    let font = Font::from_file(&run_text_settings.resolve_font_file())
-                .expect("Failed to load font");
-    let mut text = run_text_settings.create_text(&font);
 
     for child in node.children() {
         if child.node_type() == xml::NodeType::Text {
             let text_string = child.text().unwrap();
             println!("│  │  │  ├─ Text: \"{}\"", text_string);
+
+            let font = Font::from_file(&run_text_settings.resolve_font_file())
+                .expect("Failed to load font");
+            
+            let mut text = run_text_settings.create_text(&font);
+
             position = process_text_element_text(context, &mut text, text_string, position, run_text_settings);
         }
     }
