@@ -15,7 +15,7 @@ use crate::{
     *, 
     text_settings::{
         PageSettings, 
-        Size
+        Size, TextJustification
     }, 
     error::Error
 };
@@ -35,6 +35,19 @@ struct Context<'a> {
     #[allow(dead_code)]
     render_size: Vector2f,
     render_texture: &'a mut sfml::graphics::RenderTexture,
+
+    paragraph_current_line_height: Option<f32>,
+}
+
+impl<'a> Context<'a> {
+    /// Adds a line-height candidate. When the supplied height is smaller than
+    /// the current height, nothing will happen.
+    fn add_line_height_candidate(&mut self, height: f32) {
+        self.paragraph_current_line_height = match self.paragraph_current_line_height {
+            None => Some(height),
+            Some(current_height) => Some(if current_height > height { current_height } else { height })
+        }
+    }
 }
 
 fn load_page_settings(document: &xml::Document) -> Result<PageSettings, Error> {
@@ -115,7 +128,9 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager) 
         page_settings,
         
         render_size,
-        render_texture: &mut render_texture
+        render_texture: &mut render_texture,
+
+        paragraph_current_line_height: None
     };
 
     for child in document.root_element().children() {
@@ -154,6 +169,7 @@ fn process_pragraph_element(context: &mut Context,
                             text_settings: &crate::text_settings::TextSettings) -> Vector2f {
     let mut position = original_position;
 
+    context.paragraph_current_line_height = None;
     position.x = context.page_settings.margins.left as f32 * TWELFTEENTH_POINT;
 
     let mut paragraph_text_settings = text_settings.clone();
@@ -188,7 +204,13 @@ fn process_pragraph_element(context: &mut Context,
         position.y += text.global_bounds().height;
     }
 
-    let line_spacing = text.line_spacing() as f32 * HALF_POINT;
+    let line_spacing;
+    if let Some(line_height) = context.paragraph_current_line_height {
+        line_spacing = line_height
+    } else {
+        line_spacing = text.line_spacing() as f32 * HALF_POINT;
+    }
+
     let paragraph_spacing = paragraph_text_settings.spacing_below_paragraph.unwrap_or(0.0);
 
     assert!(line_spacing >= 0.0);
@@ -219,6 +241,25 @@ fn process_paragraph_properties_element(context: &Context, node: &xml::Node, par
         }
 
         match property.tag_name().name() {
+            // 17.3.1.13 jc (Paragraph Alignment)
+            "jc" => {
+                let val = property.attribute((WORD_PROCESSING_XML_NAMESPACE, "val"))
+                        .expect("No w:val in a <w:jc> element!");
+                match val {
+                    "start" => paragraph_text_settings.justify = Some(TextJustification::Start),
+                    
+                    "center" => paragraph_text_settings.justify = Some(TextJustification::Center),
+                    
+                    // TODO I can't find the "right" value to be valid in the 
+                    // ECMA Specification, but Microsoft Word seams to be using
+                    // this property anyway, so I inserted the quirk below.
+                    "end" | "right" => paragraph_text_settings.justify = Some(TextJustification::End),
+                    _ => {
+                        println!("│  │  │  ├─ E: Unknown Attribute Value");
+                    }
+                }
+            }
+
             // Paragraph Style
             "pStyle" => {
                 let style_id = property.attribute((WORD_PROCESSING_XML_NAMESPACE, "val"))
@@ -251,77 +292,109 @@ fn process_paragraph_properties_element(context: &Context, node: &xml::Node, par
 fn process_text_element(context: &mut Context,
                         node: &xml::Node, 
                         position: Vector2f, 
-                        run_text_settings: &crate::text_settings::TextSettings) -> Vector2f {
+                        run_text_settings: &TextSettings) -> Vector2f {
     let mut position = position;
+    let font = Font::from_file(&run_text_settings.resolve_font_file())
+                .expect("Failed to load font");
+    let mut text = run_text_settings.create_text(&font);
 
     for child in node.children() {
         if child.node_type() == xml::NodeType::Text {
-            let font = Font::from_file(&run_text_settings.resolve_font_file())
-                .expect("Failed to load font");
-
-            let mut text = run_text_settings.create_text(&font);
-            
             let text_string = child.text().unwrap();
             println!("│  │  │  ├─ Text: \"{}\"", text_string);
-
-            let page_horizontal_start = context.page_settings.margins.left as f32 * TWELFTEENTH_POINT;
-            let page_horizontal_end = (context.page_settings.size.width - context.page_settings.margins.right) as f32 * TWELFTEENTH_POINT;
-
-            let mut start_index = None;
-            let mut previous_word_pair = None;
-
-            let mut iter = UnicodeSegmentation::split_word_bound_indices(text_string).peekable();
-            while let Some((index, word)) = iter.next() {
-                let start;
-                match start_index {
-                    Some(start_index) => start = start_index,
-                    None => {
-                        start_index = Some(index);
-                        start = index;
-                    }
-                }
-
-                let max_width_fitting_on_page = page_horizontal_end - position.x;
-                if max_width_fitting_on_page < 0.0 {
-                    position.y += text.global_bounds().height + text.line_spacing() * LINE_SPACING;
-                    position.x = page_horizontal_start;
-                }
-
-                let mut substring = &text_string[start..(index + word.chars().count())];
-                text.set_string(substring);
-                let mut width = text.global_bounds().width;
-
-                if iter.peek().is_some() {
-                    if width < max_width_fitting_on_page {
-                        previous_word_pair = Some((index, word));
-                        continue;
-                    }
-
-                    if let Some((previous_word_index, previous_word)) = previous_word_pair {
-                        substring = &text_string[start..(previous_word_index + previous_word.chars().count())];
-                        text.set_string(substring);
-                        width = text.global_bounds().width;
-
-                        start_index = Some(index);
-                    } else {
-                        start_index = None;
-                    }
-                }
-                
-                previous_word_pair = None;
-
-                println!("│  │  │  │  ├─ Substring: \"{}\"", substring);
-                println!("│  │  │  │  ├─ Calculation: x={} w={} m={}", position.x, width, max_width_fitting_on_page);
-                text.set_position(position);
-
-                context.render_texture.draw(&text);
-                position.x += width;
-            }
-
-            assert!(previous_word_pair.is_none());
+            position = process_text_element_text(context, &mut text, text_string, position, run_text_settings);
         }
     }
 
+    position
+}
+
+fn process_text_element_text(context: &mut Context, text: &mut Text, text_string: &str, original_position: Vector2f, text_settings: &TextSettings) -> Vector2f {
+    enum LineStopReason {
+        /// The end of the text was reached. This could also very well mean the
+        /// whole string fitted on the text.
+        EndReached,
+
+        /// The line isn't the end of the text run, but this was all that could
+        /// fit on the line.
+        RestWasCutOff,
+    }
+
+    let mut position = original_position;
+
+    let page_horizontal_start = context.page_settings.margins.left as f32 * TWELFTEENTH_POINT;
+    let page_horizontal_end = (context.page_settings.size.width - context.page_settings.margins.right) as f32 * TWELFTEENTH_POINT;
+
+    let mut start_index = None;
+    let mut previous_word_pair = None;
+
+    let mut iter = UnicodeSegmentation::split_word_bound_indices(text_string).peekable();
+    while let Some((index, word)) = iter.next() {
+        let start;
+        match start_index {
+            Some(start_index) => start = start_index,
+            None => {
+                start_index = Some(index);
+                start = index;
+            }
+        }
+
+        let max_width_fitting_on_page = page_horizontal_end - position.x;
+        if max_width_fitting_on_page < 0.0 {
+            position.y += text.global_bounds().height + text.line_spacing() * LINE_SPACING;
+            position.x = page_horizontal_start;
+        }
+
+        let mut line = &text_string[start..(index + word.chars().count())];
+        text.set_string(line);
+        let mut width = text.global_bounds().width;
+
+        // TODO Use this behavior
+        let stop_reason;
+
+        if iter.peek().is_some() {
+            if width < max_width_fitting_on_page {
+                previous_word_pair = Some((index, word));
+                continue;
+            }
+            
+            stop_reason = LineStopReason::RestWasCutOff;
+
+            if let Some((previous_word_index, previous_word)) = previous_word_pair {
+                line = &text_string[start..(previous_word_index + previous_word.chars().count())];
+                text.set_string(line);
+                width = text.global_bounds().width;
+
+                start_index = Some(index);
+            } else {
+                start_index = None;
+            }
+        } else {
+            stop_reason = LineStopReason::EndReached;
+        }
+        
+        previous_word_pair = None;
+
+        println!("│  │  │  │  ├─ Line: \"{}\"", line);
+        println!("│  │  │  │  ├─ Calculation: x={} w={} m={}", position.x, width, max_width_fitting_on_page);
+
+        text.set_position(
+            match text_settings.justify.unwrap_or(TextJustification::Start) {
+                TextJustification::Start => position,
+                TextJustification::Center => Vector2f::new(
+                    page_horizontal_start + (page_horizontal_end - page_horizontal_start - width) / 2.0,
+                     position.y
+                ),
+                TextJustification::End => Vector2f::new(page_horizontal_end - width, position.y)
+            }
+        );
+
+        context.render_texture.draw(text);
+        context.add_line_height_candidate(text.global_bounds().height);
+        position.x += width;
+    }
+
+    assert!(previous_word_pair.is_none());
     position
 }
 

@@ -32,8 +32,13 @@ fn apply_run_properties_for_paragraph_mark(element: &xml::Node, text_settings: &
 
     for run_property in element.children() {
         println!("│  │  │  ├─ {}", run_property.tag_name().name());
+        for attr in run_property.attributes() {
+            println!("│  │  │  │  ├─ Attribute \"{}\" => \"{}\"", attr.name(), attr.value());
+        }
+
         match run_property.tag_name().name() {
             "b" => {
+                println!("Bold Property before <w:b />: {:?}", text_settings.bold);
                 text_settings.bold = match text_settings.bold {
                     None => Some(true),
                     Some(bold) => Some(!bold)

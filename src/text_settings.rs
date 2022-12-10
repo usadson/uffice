@@ -45,6 +45,13 @@ impl PageSettings {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum TextJustification {
+    Start,
+    Center,
+    End,
+}
+
 #[derive(Clone)]
 pub struct TextSettings {
     pub bold: Option<bool>,
@@ -53,6 +60,7 @@ pub struct TextSettings {
 
     pub spacing_below_paragraph: Option<f32>,
     pub non_complex_text_size: Option<u32>,
+    pub justify: Option<TextJustification>,
 }
 
 fn inherit_or_original<T: Clone>(inherit: &Option<T>, original: &mut Option<T>) {
@@ -69,7 +77,8 @@ impl TextSettings {
             font: None,
             color: None,
             spacing_below_paragraph: None,
-            non_complex_text_size: None
+            non_complex_text_size: None,
+            justify: None,
         }
     }
 
