@@ -1,6 +1,7 @@
 // Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+use font_kit::family_name::FamilyName;
 use sfml::graphics::{Color, TextStyle, Font, Text};
 
 use crate::word_processing::HALF_POINT;
@@ -90,22 +91,31 @@ impl TextSettings {
         inherit_or_original(&other.non_complex_text_size, &mut self.non_complex_text_size);
     }
 
-    pub fn resolve_font_file(&self) -> String {
+    pub fn load_font(&self, source: &dyn font_kit::source::Source) -> sfml::SfBox<Font> {
         let font: &str = match &self.font {
             Some(font) => font,
             None => "Calibri"
         };
 
-        match font {
-            "Calibri" => {
-                if self.bold.unwrap_or(false) {
-                    String::from("C:/Windows/Fonts/calibrib.ttf")
-                } else {
-                    String::from("C:/Windows/Fonts/calibri.ttf")
+        let mut properties = font_kit::properties::Properties::new();
+
+        if self.bold.unwrap_or(false) {
+            properties.weight = font_kit::properties::Weight::BOLD;
+        }
+
+        let family_names = [FamilyName::Title(String::from(font))];
+        let handle = source.select_best_match(&family_names, &properties)
+                .expect("Failed to find font");
+        
+        match handle {
+            font_kit::handle::Handle::Memory { bytes, font_index: _ } => {
+                unsafe {
+                    Font::from_memory(&bytes).unwrap()
                 }
             }
-            "Times New Roman" => String::from("C:/Windows/Fonts/times.ttf"),
-            _ => String::from("C:/Windows/Fonts/calibri.ttf")
+            font_kit::handle::Handle::Path { path, font_index: _ } => {
+                Font::from_file(path.to_str().unwrap()).unwrap()
+            }
         }
     }
 

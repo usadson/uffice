@@ -7,7 +7,7 @@ use roxmltree as xml;
 use unicode_segmentation::UnicodeSegmentation;
 
 use sfml::{
-    graphics::{Font, Color}, 
+    graphics::Color,
     system::Vector2f
 };
 
@@ -28,6 +28,8 @@ const LINE_SPACING: f32 = 6.0 * CORE_FACTOR;
 struct Context<'a> {
     #[allow(dead_code)]
     document: &'a xml::Document<'a>,
+
+    font_source: &'a dyn font_kit::source::Source,
 
     style_manager: &'a StyleManager,
     page_settings: PageSettings,
@@ -124,6 +126,8 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager) 
 
     let mut context = Context{
         document,
+        font_source: &font_kit::source::SystemSource::new(),
+
         style_manager,
         page_settings,
         
@@ -192,8 +196,7 @@ fn process_pragraph_element(context: &mut Context,
         }
     }
 
-    let font = Font::from_file(&paragraph_text_settings.resolve_font_file())
-                .expect("Failed to load font");
+    let font = paragraph_text_settings.load_font(context.font_source);
     let text = paragraph_text_settings.create_text(&font);
 
     // The cursor is probably somewhere in the middle of the line.
@@ -300,8 +303,7 @@ fn process_text_element(context: &mut Context,
             let text_string = child.text().unwrap();
             println!("│  │  │  ├─ Text: \"{}\"", text_string);
 
-            let font = Font::from_file(&run_text_settings.resolve_font_file())
-                .expect("Failed to load font");
+            let font = run_text_settings.load_font(context.font_source);
             
             let mut text = run_text_settings.create_text(&font);
 
@@ -411,6 +413,10 @@ fn process_text_run_element(context: &mut Context,
 
     for text_run_property in node.children() {
         println!("│  │  ├─ {}", text_run_property.tag_name().name());
+
+        for attr in text_run_property.attributes() {
+            println!("│  │  │  ├─ Attribute \"{}\" → \"{}\"", attr.name(), attr.value());
+        }
 
         if text_run_property.tag_name().name() == "rPr" {
             apply_run_properties_for_paragraph_mark(&text_run_property, &mut run_text_settings);
