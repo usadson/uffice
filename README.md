@@ -54,7 +54,7 @@ cargo run
 ## UX Checklist
 The following checklist documents the requirements that have to put in place to help aid new users, installations and usages of the application.
 
-- [ ] Add a CI/CD pipeline
+- [x] Add a CI/CD pipeline
 - [ ] Provide production-ready binaries
 - [ ] Publish a release
 - [ ] Add a build script to auto-install the SFML binaries
