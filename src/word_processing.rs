@@ -4,45 +4,37 @@
  */
 
 use roxmltree as xml;
-use unicode_segmentation::{self, UnicodeSegmentation};
+use unicode_segmentation::UnicodeSegmentation;
 
-use sfml::{graphics::{Font, Text, Color}, system::Vector2f};
+use sfml::{
+    graphics::{Font, Color}, 
+    system::Vector2f
+};
 
-use crate::{*, text_settings::{PageSettings, Size}};
+use crate::{
+    *, 
+    text_settings::{
+        PageSettings, 
+        Size
+    }, 
+    error::Error
+};
 
-pub const WORD_PROCESSING_XML_NAMESPACE: &'static str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-
-const CORE_FACTOR: f32 = 2.0f32;
-const TWELFTEENTH_POINT: f32 = 1f32 / 12.0 * CORE_FACTOR;
-const HALF_POINT: f32 = 1f32 * CORE_FACTOR;
+const CORE_FACTOR: f32 = 3.0f32;
+pub const TWELFTEENTH_POINT: f32 = 1f32 / 12.0 * CORE_FACTOR;
+pub const HALF_POINT: f32 = 1f32 * CORE_FACTOR;
 const LINE_SPACING: f32 = 6.0 * CORE_FACTOR;
 
 struct Context<'a> {
     #[allow(dead_code)]
     document: &'a xml::Document<'a>,
+
+    style_manager: &'a StyleManager,
     page_settings: PageSettings,
 
     #[allow(dead_code)]
     render_size: Vector2f,
     render_texture: &'a mut sfml::graphics::RenderTexture,
-}
-
-#[derive(Debug)]
-enum Error {
-    XmlError(xml::Error),
-    ParseIntError(std::num::ParseIntError),
-}
-
-impl From<xml::Error> for Error {
-    fn from(error: xml::Error) -> Self {
-        Self::XmlError(error)
-    }
-}
-
-impl From<std::num::ParseIntError> for Error {
-    fn from(error: std::num::ParseIntError) -> Self {
-        Self::ParseIntError(error)
-    }
 }
 
 fn load_page_settings(document: &xml::Document) -> Result<PageSettings, Error> {
@@ -89,8 +81,10 @@ fn load_page_settings(document: &xml::Document) -> Result<PageSettings, Error> {
     panic!("No direct child \"sectPr\" of root element found :(");
 }
 
-pub fn process_document(document: &xml::Document) -> sfml::graphics::RenderTexture {
-    let text_settings = TextSettings::new(String::from("Calibri"));
+pub fn process_document(document: &xml::Document, style_manager: &StyleManager) -> sfml::graphics::RenderTexture {
+    let text_settings = style_manager.default_text_settings();
+    //text_settings.font = Some(String::from("Calibri"));
+
     let page_settings = load_page_settings(document).unwrap();
     
     let mut position = Vector2f::new(
@@ -117,6 +111,7 @@ pub fn process_document(document: &xml::Document) -> sfml::graphics::RenderTextu
 
     let mut context = Context{
         document,
+        style_manager,
         page_settings,
         
         render_size,
@@ -155,9 +150,9 @@ fn process_body_element(context: &mut Context,
 
 fn process_pragraph_element(context: &mut Context,
                             node: &xml::Node, 
-                            position: Vector2f, 
+                            original_position: Vector2f, 
                             text_settings: &crate::text_settings::TextSettings) -> Vector2f {
-    let mut position = position;
+    let mut position = original_position;
 
     position.x = context.page_settings.margins.left as f32 * TWELFTEENTH_POINT;
 
@@ -169,28 +164,49 @@ fn process_pragraph_element(context: &mut Context,
         match child.tag_name().name() {
             // Paragraph Properties section 17.3.1.26
             "pPr" => {
-                process_paragraph_properties_element(&child, &mut paragraph_text_settings);
+                process_paragraph_properties_element(context, &child, &mut paragraph_text_settings);
             }
+
             // Text Run
             "r" => {
                 position = process_text_run_element(context, &child, position, &paragraph_text_settings);
             }
+
             _ => ()
         }
     }
 
     let font = Font::from_file(&paragraph_text_settings.resolve_font_file())
                 .expect("Failed to load font");
+    let text = paragraph_text_settings.create_text(&font);
 
-    position.y += font.line_spacing((paragraph_text_settings.non_complex_text_size as f32 * HALF_POINT) as u32) + paragraph_text_settings.spacing_below_paragraph;
+    // The cursor is probably somewhere in the middle of the line.
+    // We should put it at the next line.
+    //
+    // NOTE: This isn't line/paragraph spacing; see below.
+    if position != original_position {
+        position.y += text.global_bounds().height;
+    }
+
+    let line_spacing = text.line_spacing() as f32 * HALF_POINT;
+    let paragraph_spacing = paragraph_text_settings.spacing_below_paragraph.unwrap_or(0.0);
+
+    assert!(line_spacing >= 0.0);
+    assert!(paragraph_spacing >= 0.0);
+
+    println!("│  ├─ Advancing {}  +  {}", line_spacing, paragraph_spacing);
+    position.y += line_spacing + paragraph_spacing;
 
     position
 }
 
 // pPr
-fn process_paragraph_properties_element(node: &xml::Node, paragraph_text_settings: &mut TextSettings) {
+fn process_paragraph_properties_element(context: &Context, node: &xml::Node, paragraph_text_settings: &mut TextSettings) {
     for property in node.children() {
         println!("│  │  ├─ {}", property.tag_name().name());
+        for attr in property.attributes() {
+            println!("│  │  │  ├─ Attribute: {} = {}", attr.name(), attr.value());
+        }
 
         for sub_property in property.children() {
             println!("│  │  │  ├─ {}", sub_property.tag_name().name());
@@ -203,6 +219,13 @@ fn process_paragraph_properties_element(node: &xml::Node, paragraph_text_setting
         }
 
         match property.tag_name().name() {
+            // Paragraph Style
+            "pStyle" => {
+                let style_id = property.attribute((WORD_PROCESSING_XML_NAMESPACE, "val"))
+                        .expect("No w:val in a <w:pStyle> element!");
+                context.style_manager.apply_paragraph_style(style_id, paragraph_text_settings);
+            }
+
             // Run Properties section 17.3.2.28
             "rPr" => {
                 //apply_run_properties_for_paragraph_mark(&property, paragraph_text_settings); 
@@ -212,8 +235,8 @@ fn process_paragraph_properties_element(node: &xml::Node, paragraph_text_setting
                     println!("│  │  │  ├─ Spacing Attribute: {} = {}", attribute.name(), attribute.value());
                     match attribute.name() {
                         "after" => {
-                            paragraph_text_settings.spacing_below_paragraph = str::parse(attribute.value())
-                                    .expect("Failed to parse <w:spacing> 'after' attribute");
+                            paragraph_text_settings.spacing_below_paragraph = Some(str::parse(attribute.value())
+                                    .expect("Failed to parse <w:spacing> 'after' attribute"));
                         }
                         _ => ()
                     }
@@ -236,9 +259,7 @@ fn process_text_element(context: &mut Context,
             let font = Font::from_file(&run_text_settings.resolve_font_file())
                 .expect("Failed to load font");
 
-            let mut text = Text::new("", &font, (run_text_settings.non_complex_text_size as f32 * HALF_POINT) as u32);
-            text.set_style(run_text_settings.create_style());
-            text.set_fill_color(run_text_settings.color);
+            let mut text = run_text_settings.create_text(&font);
             
             let text_string = child.text().unwrap();
             println!("│  │  │  ├─ Text: \"{}\"", text_string);

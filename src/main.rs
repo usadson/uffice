@@ -2,7 +2,9 @@
 // All Rights Reserved.
 
 mod color_parser;
+mod error;
 mod font;
+mod style;
 mod text_settings;
 mod word_processing;
 
@@ -22,21 +24,28 @@ use sfml::window::*;
 
 //use font_kit;
 use notify::{Watcher, RecursiveMode};
+use style::StyleManager;
 use text_settings::TextSettings;
 
+pub const WORD_PROCESSING_XML_NAMESPACE: &'static str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+
 fn apply_run_properties_for_paragraph_mark(element: &xml::Node, text_settings: &mut TextSettings) {
+    assert_eq!(element.tag_name().name(), "rPr");
+
     for run_property in element.children() {
         println!("│  │  │  ├─ {}", run_property.tag_name().name());
         match run_property.tag_name().name() {
             "b" => {
-                println!("Set to bold: was={} new={}", text_settings.bold, !text_settings.bold);
-                text_settings.bold = !text_settings.bold;
+                text_settings.bold = match text_settings.bold {
+                    None => Some(true),
+                    Some(bold) => Some(!bold)
+                };
             }
             "color" => {
                 for attr in run_property.attributes() {
                     println!("│  │  │  │  ├─ Color Attribute: {} => {}", attr.name(), attr.value());
                     if attr.name() == "val" {
-                        text_settings.color = color_parser::parse_color(attr.value()).unwrap();
+                        text_settings.color = Some(color_parser::parse_color(attr.value()).unwrap());
                     }
                 }
             }
@@ -44,7 +53,7 @@ fn apply_run_properties_for_paragraph_mark(element: &xml::Node, text_settings: &
                 for attr in run_property.attributes() {
                     println!("│  │  │  │  ├─ Font Attribute: {} => {}", attr.name(), attr.value());
                     if attr.name() == "ascii" {
-                        text_settings.font = String::from(attr.value());
+                        text_settings.font = Some(String::from(attr.value()));
                     }
                 }
             }
@@ -53,14 +62,20 @@ fn apply_run_properties_for_paragraph_mark(element: &xml::Node, text_settings: &
                     println!("│  │  │  │  ├─ Size Attribute: {} => {}", attr.name(), attr.value());
                     if attr.name() == "val" {
                         let new_value = str::parse::<u32>(attr.value()).expect("Failed to parse attribute");
-                        println!("│  │  │  │  ├─ Value Attribute: old={} new={}", text_settings.non_complex_text_size, new_value);
-                        text_settings.non_complex_text_size = new_value;
+                        println!("│  │  │  │  ├─ Value Attribute: old={:?} new={}", text_settings.non_complex_text_size, new_value);
+                        text_settings.non_complex_text_size = Some(new_value);
                     }
                 }
             }
             _ => ()
         }
     }
+}
+
+fn load_archive_file_to_string<'a>(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Rc<String> {
+    let zip_document = archive.by_name(name).expect("Not a DOCX file");
+    Rc::new(std::io::read_to_string(zip_document)
+            .expect("Failed to read"))
 }
 
 // A4: 210 × 297
@@ -76,14 +91,15 @@ fn draw_document(archive_path: &str) -> RenderTexture {
         println!("[Document] ZIP: File: {}", file.name());
     }
 
-    let zip_document = archive.by_name("word/document.xml").expect("Not a DOCX file");
-    let document_text = Rc::new(std::io::read_to_string(zip_document)
-            .expect("Failed to read"));
+    let styles_document_text = load_archive_file_to_string(&mut archive, "word/styles.xml");
+    let styles_document = xml::Document::parse(&styles_document_text)
+            .expect("Failed to parse document");
+    let style_manager = StyleManager::from_document(&styles_document).unwrap();
     
+    let document_text = load_archive_file_to_string(&mut archive, "word/document.xml");
     let document = xml::Document::parse(&document_text)
-        .expect("Failed to parse document");
-
-    word_processing::process_document(&document)
+            .expect("Failed to parse document");
+    word_processing::process_document(&document, &style_manager)
 }
 
 struct Application {

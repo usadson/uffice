@@ -1,9 +1,11 @@
 // Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use sfml::graphics::{Color, TextStyle};
+use sfml::graphics::{Color, TextStyle, Font, Text};
 
-#[derive(Clone)]
+use crate::word_processing::HALF_POINT;
+
+#[derive(Clone, Copy)]
 pub struct Size {
     pub width: u32,
     pub height: u32,
@@ -15,7 +17,7 @@ impl Size {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Rect {
     pub left: u32,
     pub right: u32,
@@ -29,7 +31,7 @@ impl Rect {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct PageSettings {
     pub size: Size,
     pub margins: Rect,
@@ -45,43 +47,80 @@ impl PageSettings {
 
 #[derive(Clone)]
 pub struct TextSettings {
-    pub bold: bool,
-    pub font: String,
-    pub color: Color,
+    pub bold: Option<bool>,
+    pub font: Option<String>,
+    pub color: Option<Color>,
 
-    pub spacing_below_paragraph: f32,
-    pub non_complex_text_size: u32,
+    pub spacing_below_paragraph: Option<f32>,
+    pub non_complex_text_size: Option<u32>,
+}
+
+fn inherit_or_original<T: Clone>(inherit: &Option<T>, original: &mut Option<T>) {
+    match inherit {
+        Some(value) => *original = Some((*value).clone()),
+        None => ()
+    }
 }
 
 impl TextSettings {
-    pub fn new(font: String) -> Self {
+    pub fn new() -> Self {
         Self{ 
-            bold: false,
-            font,
-            color: Color::BLACK,
-            spacing_below_paragraph: 0.0f32,
-            non_complex_text_size: 22,
+            bold: None, 
+            font: None,
+            color: None,
+            spacing_below_paragraph: None,
+            non_complex_text_size: None
         }
     }
 
-    pub fn resolve_font_file(self: &Self) -> String {
-        println!("Font is \"{}\"", self.font);
-        if self.font == "Times New Roman" {
-            return String::from("C:/Windows/Fonts/times.ttf");
-        }
+    pub fn inherit_from(&mut self, other: &TextSettings) {
+        inherit_or_original(&other.bold, &mut self.bold);
+        inherit_or_original(&other.font, &mut self.font);
+        inherit_or_original(&other.color, &mut self.color);
+        inherit_or_original(&other.spacing_below_paragraph, &mut self.spacing_below_paragraph);
+        inherit_or_original(&other.non_complex_text_size, &mut self.non_complex_text_size);
+    }
 
-        if self.bold {
-            return String::from("C:/Windows/Fonts/calibrib.ttf");
+    pub fn resolve_font_file(&self) -> String {
+        match &self.font {
+            Some(font) => {
+                // println!("Font is \"{}\"", font);
+                if font == "Times New Roman" {
+                    return String::from("C:/Windows/Fonts/times.ttf");
+                }
+
+                if let Some(bold) = self.bold {
+                    if bold {
+                        return String::from("C:/Windows/Fonts/calibrib.ttf");
+                    }
+                }
+            }
+            None => ()
         }
 
         String::from("C:/Windows/Fonts/calibri.ttf")
     }
 
-    pub fn create_style(self: &Self) -> TextStyle {
-        if self.bold {
-            return TextStyle::BOLD;
-        }
+    pub fn create_text<'a>(self: &Self, font: &'a Font) -> Text<'a> {
+        let character_size = match self.non_complex_text_size {
+            Some(size) => size as f32 * HALF_POINT,
+            None => panic!("No default text size defined!")
+        } as u32;
 
-        TextStyle::REGULAR
+        let mut text = Text::new("L", font, character_size);
+        text.set_style(self.create_style());
+        text.set_fill_color(self.color.unwrap_or(Color::BLACK));
+        
+        text
+    }
+
+    pub fn create_style(self: &Self) -> TextStyle {
+        match self.bold {
+            None => TextStyle::REGULAR,
+            Some(bold) => match bold {
+                true => TextStyle::BOLD,
+                false => TextStyle::REGULAR
+            }
+        }
     }
 }
