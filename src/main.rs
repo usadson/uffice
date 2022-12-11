@@ -307,22 +307,17 @@ impl Application {
     }
 }
 
+#[derive(StructOpt, Debug)]
+#[structopt(name = "Uffice")]
+struct Options {
+
+}
+
 fn main() {
     dotenv::dotenv().expect("Failed to load .env");
 
     println!(">> Uffice <<");
 
-    // let source = font_kit::source::SystemSource::new();
-    // for font in source.all_fonts().expect("Failed to iterate fonts") {
-    //     match font {
-    //         font_kit::handle::Handle::Path { path, ..} => {
-    //             println!("Font: {}", path.display());
-    //         }
-    //         _ => ()
-    //     }
-    // }
-
-    
     let mut app = Application::new(
             std::env::var("UFFICE_TEST_FILE").expect("No file given")
     );
