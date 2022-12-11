@@ -168,7 +168,7 @@ struct Application {
     archive_path: String,
 
     #[allow(dead_code)]
-    watcher: notify::ReadDirectoryChangesWatcher,
+    watcher: notify::RecommendedWatcher,
 
     window: RenderWindow,
 
