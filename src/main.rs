@@ -21,6 +21,7 @@ use sfml::window::*;
 
 //use font_kit;
 use notify::{Watcher, RecursiveMode};
+use structopt::StructOpt;
 use style::StyleManager;
 use text_settings::TextSettings;
 
