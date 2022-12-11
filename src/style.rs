@@ -4,7 +4,7 @@
 use roxmltree as xml;
 use std::collections::HashMap;
 
-use crate::{error::Error, WORD_PROCESSING_XML_NAMESPACE, text_settings::TextSettings, apply_run_properties_for_paragraph_mark};
+use crate::{error::Error, WORD_PROCESSING_XML_NAMESPACE, text_settings::TextSettings};
 
 struct Style {
     text_settings: TextSettings
@@ -65,7 +65,7 @@ impl Style {
                 }
                 "rPr" => {
                     let mut settings = style.text_settings;
-                    apply_run_properties_for_paragraph_mark(&child, &mut settings);
+                    settings.apply_run_properties_element(&child);
                     style.text_settings = settings;
                 }
                 _ => ()
@@ -103,7 +103,7 @@ fn process_xml_rpr_default(element: &xml::Node, manager: &mut StyleManager) {
         println!("Style⟫ │  │  ├─ {}", child.tag_name().name());
         match child.tag_name().name() {
             "rPr" => {
-                apply_run_properties_for_paragraph_mark(&child, &mut manager.default_text_settings);
+                manager.default_text_settings.apply_run_properties_element(&child);
             }
             _ => ()
         }
