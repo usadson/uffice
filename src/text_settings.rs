@@ -62,6 +62,8 @@ pub struct TextSettings {
     pub spacing_below_paragraph: Option<f32>,
     pub non_complex_text_size: Option<u32>,
     pub justify: Option<TextJustification>,
+
+    
 }
 
 fn inherit_or_original<T: Clone>(inherit: &Option<T>, original: &mut Option<T>) {
