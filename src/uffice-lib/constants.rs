@@ -5,7 +5,7 @@ pub mod vendor {
 
     /// The name of the vendor.
     /// This constant is used for the ProgID.
-    pub const NAME: &'static str = "TheWoosh";
+    pub const NAME: &str = "TheWoosh";
 
 }
 
@@ -23,14 +23,14 @@ pub mod component {
 
         /// The name of the 'Document' component (file type).
         /// This constant is used for the ProgID.
-        pub const NAME: &'static str = "Document";
+        pub const NAME: &str = "Document";
 
         pub const VERSION: u32 = 1;
 
         /// https://learn.microsoft.com/en-us/windows/win32/shell/fa-progids
-        pub const PROG_ID: &'static str = prog_id!(NAME, VERSION);
+        pub const PROG_ID: &str = prog_id!(NAME, VERSION);
 
-        pub const FRIENDLY_INTERNATIONAL_NAME: &'static str = "TheWoosh Uffice Document";
+        pub const FRIENDLY_INTERNATIONAL_NAME: &str = "TheWoosh Uffice Document";
     }
 
 }
