@@ -1,5 +1,11 @@
 # Uffice
-An alpha-stage word processor, working on compatibility with WordprocessingML format of the [Office Open Specification (ECMA-376)](https://www.ecma-international.org/publications-and-standards/standards/ecma-376/).
+Uffice is an alpha-stage word processor, working on compatibility with WordprocessingML format of the [Office Open Specification (ECMA-376)](https://www.ecma-international.org/publications-and-standards/standards/ecma-376/).
+
+<p align="center">
+   <img src="docs/screenshot/quick-overview.png"
+   alt="Size Limit comment in pull request about bundle size changes"
+   width="641" height="380">
+</p>
 
 ## Installation
 As the software is alpha-stage, the user experience is yet to be. You can simply clone this repository and use [Cargo](https://doc.rust-lang.org/cargo/) to build the project.
