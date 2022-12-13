@@ -373,7 +373,7 @@ fn process_text_element_text(context: &mut Context, text: &mut Text, text_string
             start_index = None;
 
             if let Some((previous_word_index, previous_word)) = previous_word_pair {
-                if word.trim().len() != 0 {
+                if !word.trim().is_empty() {
                     line = &text_string[start..(previous_word_index + previous_word.chars().count())];
                     text.set_string(line);
                     width = text.local_bounds().width;
