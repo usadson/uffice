@@ -333,6 +333,8 @@ fn process_text_element_text(context: &mut Context, text: &mut Text, text_string
     let mut start_index = None;
     let mut previous_word_pair = None;
 
+    let mut previous_stop_reason = None;
+
     let mut iter = UnicodeSegmentation::split_word_bound_indices(text_string).peekable();
     while let Some((index, word)) = iter.next() {
         let start;
@@ -344,35 +346,40 @@ fn process_text_element_text(context: &mut Context, text: &mut Text, text_string
             }
         }
 
-        let max_width_fitting_on_page = page_horizontal_end - position.x;
-        if max_width_fitting_on_page < 0.0 {
-            position.y += text.global_bounds().height + text.line_spacing() * LINE_SPACING;
-            position.x = page_horizontal_start;
-        }
-
         let mut line = &text_string[start..(index + word.chars().count())];
         text.set_string(line);
-        let mut width = text.global_bounds().width;
+        let mut width = text.local_bounds().width;
+
+        let max_width_fitting_on_page = page_horizontal_end - position.x;
+        if max_width_fitting_on_page < 0.0 || previous_stop_reason.is_some() {
+            position.y += text.global_bounds().height + text.line_spacing() * LINE_SPACING;
+            position.x = page_horizontal_start;
+
+            previous_stop_reason = None;
+            continue;
+        }
 
         // TODO Use this behavior
         let stop_reason;
 
         if iter.peek().is_some() {
+            println!("width({}) < max_width_fitting_on_page({}) \"{}\"", width, max_width_fitting_on_page, line);
             if width < max_width_fitting_on_page {
                 previous_word_pair = Some((index, word));
                 continue;
             }
             
             stop_reason = LineStopReason::RestWasCutOff;
+            start_index = None;
 
             if let Some((previous_word_index, previous_word)) = previous_word_pair {
-                line = &text_string[start..(previous_word_index + previous_word.chars().count())];
-                text.set_string(line);
-                width = text.global_bounds().width;
+                if word.trim().len() != 0 {
+                    line = &text_string[start..(previous_word_index + previous_word.chars().count())];
+                    text.set_string(line);
+                    width = text.local_bounds().width;
 
-                start_index = Some(index);
-            } else {
-                start_index = None;
+                    start_index = Some(index);
+                }
             }
         } else {
             stop_reason = LineStopReason::EndReached;
@@ -397,6 +404,10 @@ fn process_text_element_text(context: &mut Context, text: &mut Text, text_string
         context.render_texture.draw(text);
         context.add_line_height_candidate(text.global_bounds().height);
         position.x += width;
+
+        position.y += 10.0;
+
+        previous_stop_reason = Some(stop_reason);
     }
 
     assert!(previous_word_pair.is_none());
