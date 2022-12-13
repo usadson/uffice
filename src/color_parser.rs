@@ -49,3 +49,28 @@ pub fn parse_color(value: &str) -> Result<Color, ColorParseError> {
         parse_color_element(value.as_bytes()[4], value.as_bytes()[5])?
     ))
 }
+
+pub fn parse_highlight_color(value: &str) -> Color {
+    match value {
+        "black" => Color::rgb(0, 0, 0),
+        "blue" => Color::rgb(0, 0, 0xFF),
+        "cyan" => Color::rgb(0, 0xFF, 0xFF),
+        "darkBlue" => Color::rgb(0, 0, 0x8B),
+        "darkCyan" => Color::rgb(0, 0x8B, 0x8B),
+        "darkGray" => Color::rgb(0xA9, 0xA9, 0xA9),
+        "darkGreen" => Color::rgb(0, 0x64, 0),
+        "darkMagenta" => Color::rgb(0x80, 0, 0x80),
+        "darkRed" => Color::rgb(0x8B, 0, 0),
+        "darkYellow" => Color::rgb(0x80, 0x80, 0),
+        "green" => Color::rgb(0, 0xFF, 0),
+        "lightGray" => Color::rgb(0xD3, 0xD3, 0xD3),
+        "magenta" => Color::rgb(0xFF, 0, 0xFF),
+        "none" => Color::rgba(0, 0, 0, 0),
+        "red" => Color::rgb(0xFF, 0, 0),
+        "white" => Color::rgb(0xFF, 0xFF, 0xFF),
+        "yellow" => Color::rgb(0xFF, 0xFF, 0),
+        _ => {
+            panic!("Invalid ST_HighlightColor: \"{}\"", value);
+        }
+    }
+}

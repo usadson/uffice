@@ -96,6 +96,26 @@ fn load_page_settings(document: &xml::Document) -> Result<PageSettings, Error> {
     panic!("No direct child \"sectPr\" of root element found :(");
 }
 
+fn paint_text(context: &mut Context, text: &mut sfml::graphics::Text, text_settings: &TextSettings) {
+    if let Some(highlight_color) = text_settings.highlight_color {
+        paint_text_highlight(context, text, highlight_color);
+    }
+
+    context.render_texture.draw(text);
+}
+
+fn paint_text_highlight(context: &mut Context, text: &mut sfml::graphics::Text, highlight_color: Color) {
+    let mut shape = RectangleShape::new();
+
+    shape.set_position(text.position());
+
+    let size = text.local_bounds().size();
+    shape.set_size(Vector2f::new(size.x, text.character_size() as f32 + 30.0));
+    shape.set_fill_color(highlight_color);
+
+    context.render_texture.draw(&shape);
+}
+
 pub fn process_document(document: &xml::Document, style_manager: &StyleManager) -> sfml::graphics::RenderTexture {
     let text_settings = style_manager.default_text_settings();
     //text_settings.font = Some(String::from("Calibri"));
@@ -401,11 +421,9 @@ fn process_text_element_text(context: &mut Context, text: &mut Text, text_string
             }
         );
 
-        context.render_texture.draw(text);
+        paint_text(context, text, text_settings);
         context.add_line_height_candidate(text.global_bounds().height);
         position.x += width;
-
-        position.y += 10.0;
 
         previous_stop_reason = Some(stop_reason);
     }

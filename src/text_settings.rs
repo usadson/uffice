@@ -5,7 +5,7 @@ use font_kit::family_name::FamilyName;
 use roxmltree as xml;
 use sfml::graphics::{Color, TextStyle, Font, Text};
 
-use crate::{word_processing::HALF_POINT, color_parser};
+use crate::{word_processing::HALF_POINT, color_parser, WORD_PROCESSING_XML_NAMESPACE};
 
 #[derive(Clone, Copy)]
 pub struct Size {
@@ -64,7 +64,7 @@ pub struct TextSettings {
     pub non_complex_text_size: Option<u32>,
     pub justify: Option<TextJustification>,
 
-    
+    pub highlight_color: Option<Color>,
 }
 
 fn inherit_or_original<T: Clone>(inherit: &Option<T>, original: &mut Option<T>) {
@@ -83,6 +83,7 @@ impl TextSettings {
             spacing_below_paragraph: None,
             non_complex_text_size: None,
             justify: None,
+            highlight_color: None,
         }
     }
 
@@ -92,6 +93,8 @@ impl TextSettings {
         inherit_or_original(&other.color, &mut self.color);
         inherit_or_original(&other.spacing_below_paragraph, &mut self.spacing_below_paragraph);
         inherit_or_original(&other.non_complex_text_size, &mut self.non_complex_text_size);
+        inherit_or_original(&other.justify, &mut self.justify);
+        inherit_or_original(&other.highlight_color, &mut self.highlight_color);
     }
 
     pub fn load_font(&self, source: &dyn font_kit::source::Source) -> sfml::SfBox<Font> {
@@ -169,6 +172,14 @@ impl TextSettings {
                         }
                     }
                 }
+
+                // 17.3.2.15 highlight (Text Highlighting)
+                "highlight" => {
+                    let val = run_property.attribute((WORD_PROCESSING_XML_NAMESPACE, "val"))
+                            .expect("No w:val on a <w:highlight> element!");
+                    self.highlight_color = Some(color_parser::parse_highlight_color(val));
+                }
+
                 "rFonts" => {
                     for attr in run_property.attributes() {
                         println!("│  │  │  │  ├─ Font Attribute: {} => {}", attr.name(), attr.value());
