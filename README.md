@@ -1,5 +1,7 @@
 # Uffice
-Uffice is an alpha-stage word processor, working on compatibility with WordprocessingML format of the [Office Open Specification (ECMA-376)](https://www.ecma-international.org/publications-and-standards/standards/ecma-376/).
+[![uffice](https://github.com/usadson/uffice/actions/workflows/build.yaml/badge.svg)](https://github.com/usadson/uffice/actions/workflows/build.yaml)
+
+Uffice isuffice an alpha-stage word processor, working on compatibility with WordprocessingML format of the [Office Open Specification (ECMA-376)](https://www.ecma-international.org/publications-and-standards/standards/ecma-376/).
 
 <p align="center">
    <img src="docs/screenshot/quick-overview.png"
