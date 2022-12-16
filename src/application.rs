@@ -136,14 +136,16 @@ impl Application {
                 Err(e) => println!("[Watcher] Failed to watch: {:?}", e),
             }
         }).expect("Failed to instantiate file watcher");
-    
-        watcher.watch(std::path::Path::new(&archive_path), RecursiveMode::NonRecursive).unwrap();
+
+        let document_file_path = std::path::Path::new(&archive_path);
+        watcher.watch(document_file_path, RecursiveMode::NonRecursive).unwrap();
 
         let context_settings = ContextSettings::default();
         let mut window = RenderWindow::new(VideoMode::new(1280, 720, 32), 
-                "Uffice", Style::DEFAULT, &context_settings);
+                &format!("{} - {}", uffice_lib::constants::vendor::NAME, document_file_path.file_name().unwrap().to_string_lossy()), Style::DEFAULT, &context_settings);
 
         window.set_framerate_limit(30);
+        window.set_active(true);
 
         Application {
             archive_path: archive_path.clone(),
