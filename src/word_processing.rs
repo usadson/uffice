@@ -1,3 +1,5 @@
+use std::{path::Path, process::exit};
+
 /**
  * Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
  * All Rights Reserved.
@@ -29,7 +31,7 @@ struct Context<'a> {
     #[allow(dead_code)]
     document: &'a xml::Document<'a>,
 
-    font_source: &'a dyn font_kit::source::Source,
+    font_source: font_kit::sources::multi::MultiSource,
 
     style_manager: &'a StyleManager,
     page_settings: PageSettings,
@@ -146,7 +148,7 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager) 
 
     let mut context = Context{
         document,
-        font_source: &font_kit::source::SystemSource::new(),
+        font_source: font_kit::sources::multi::MultiSource::from_sources(resolve_font_sources()),
 
         style_manager,
         page_settings,
@@ -216,7 +218,7 @@ fn process_pragraph_element(context: &mut Context,
         }
     }
 
-    let font = paragraph_text_settings.load_font(context.font_source);
+    let font = paragraph_text_settings.load_font(&context.font_source);
     let text = paragraph_text_settings.create_text(&font);
 
     // The cursor is probably somewhere in the middle of the line.
@@ -323,7 +325,7 @@ fn process_text_element(context: &mut Context,
             let text_string = child.text().unwrap();
             println!("│  │  │  ├─ Text: \"{}\"", text_string);
 
-            let font = run_text_settings.load_font(context.font_source);
+            let font = run_text_settings.load_font(&context.font_source);
             
             let mut text = run_text_settings.create_text(&font);
 
@@ -457,4 +459,41 @@ fn process_text_run_element(context: &mut Context,
     }
 
     position
+}
+
+fn resolve_font_sources() -> Vec<Box<(dyn font_kit::source::Source + 'static)>> {
+    let mut sources = vec![];
+
+    #[cfg(target_os = "windows")]
+    {
+        //let d = windows::Storage::
+
+        let str = format!("{}\\Microsoft\\FontCache\\4\\CloudFonts", env!("LOCALAPPDATA"));
+        println!("Path: {:?}", str);
+
+        match Path::new(&str).canonicalize() {
+            Ok(path) => {
+                println!("[ResolveFontSources] Canonical: {:?}", path);
+                sources.push(path);
+            }
+            Err(e) => {
+                println!("[ResolveFontSources] Failed to locate Windows FontCache \"{}\": {:?}", str, e);
+                
+                exit(0)
+            }
+        }
+
+
+        // font_sources.push(Box::new(
+            
+        // ));
+    }
+
+
+    vec![
+        Box::new(font_kit::source::SystemSource::new()),
+        Box::new(fonts::WinFontCacheSource::new(
+            sources
+        ))
+    ]
 }

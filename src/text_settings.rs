@@ -97,7 +97,7 @@ impl TextSettings {
         inherit_or_original(&other.highlight_color, &mut self.highlight_color);
     }
 
-    pub fn load_font(&self, source: &dyn font_kit::source::Source) -> sfml::SfBox<Font> {
+    pub fn load_font(&self, source: &font_kit::sources::multi::MultiSource) -> sfml::SfBox<Font> {
         let font: &str = match &self.font {
             Some(font) => font,
             None => "Calibri"
