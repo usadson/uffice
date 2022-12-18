@@ -1,0 +1,10 @@
+[package]
+name = "sfml-lib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[build-dependencies]
+http_req = { version = "*" }
+zip-extract = "*"

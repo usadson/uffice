@@ -21,6 +21,13 @@ structopt = "*"
 unicode-segmentation = "*"
 zip = "*"
 
+[build-dependencies]
+sfml-lib = { path = "component/sfml-lib", version = "*" }
+
+[features]
+default = [ "download-precompiled-sfml" ]
+download-precompiled-sfml = []
+
 [target.'cfg(windows)'.dependencies]
 registry = "*"
 utfx = "*"
