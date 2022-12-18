@@ -29,6 +29,10 @@ utfx = "*"
 name = "uffice"
 path = "src/main.rs"
 
+[[bin]]
+name = "uffice-analysis-tool"
+path = "src/bin/analysis-tool/main.rs"
+
 [lib]
 name = "uffice_lib"
 path = "src/uffice-lib/lib.rs"
