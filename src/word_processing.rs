@@ -337,6 +337,7 @@ fn process_text_element(context: &mut Context,
 }
 
 fn process_text_element_text(context: &mut Context, text: &mut Text, text_string: &str, original_position: Vector2f, text_settings: &TextSettings) -> Vector2f {
+    #[derive(Debug)]
     enum LineStopReason {
         /// The end of the text was reached. This could also very well mean the
         /// whole string fitted on the text.
@@ -377,16 +378,22 @@ fn process_text_element_text(context: &mut Context, text: &mut Text, text_string
             position.y += text.global_bounds().height + text.line_spacing() * LINE_SPACING;
             position.x = page_horizontal_start;
 
-            previous_stop_reason = None;
-            continue;
+            if iter.peek().is_some() {
+                previous_stop_reason = None;
+                continue;
+            }
         }
 
-        // TODO Use this behavior
         let stop_reason;
 
-        if iter.peek().is_some() {
-            println!("width({}) < max_width_fitting_on_page({}) \"{}\"", width, max_width_fitting_on_page, line);
-            if width < max_width_fitting_on_page {
+        println!("width({}) < max_width_fitting_on_page({}) \"{}\"", width, max_width_fitting_on_page, line);
+        if let Some((next_index, next_word)) = iter.peek() {
+            let line_with_next = &text_string[start..(next_index + next_word.chars().count())];
+            text.set_string(line_with_next);
+            let width_with_next = text.local_bounds().width;
+            text.set_string(line);
+
+            if width < max_width_fitting_on_page && (iter.clone().skip(1).next().is_some() || width_with_next < max_width_fitting_on_page) {
                 previous_word_pair = Some((index, word));
                 continue;
             }
@@ -409,7 +416,7 @@ fn process_text_element_text(context: &mut Context, text: &mut Text, text_string
         
         previous_word_pair = None;
 
-        println!("│  │  │  │  ├─ Line: \"{}\"", line);
+        println!("│  │  │  │  ├─ Line: \"{}\", stop_reason={:?}", line, stop_reason);
         println!("│  │  │  │  ├─ Calculation: x={} w={} m={}", position.x, width, max_width_fitting_on_page);
 
         text.set_position(
