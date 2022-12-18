@@ -189,6 +189,34 @@ fn process_body_element(context: &mut Context,
     position
 }
 
+fn process_hyperlink_element(context: &mut Context, 
+                             node: &xml::Node,
+                             mut position: Vector2f,
+                             text_settings: &crate::text_settings::TextSettings) -> Vector2f {
+    for attr in node.attributes() {
+        println!("│  │  ├─ A: \"{}\" => \"{}\"", attr.name(), attr.value());
+    }
+
+    for child in node.children() {
+        println!("│  │  │  ├─ HC: {}", child.tag_name().name());
+        
+        for attr in child.attributes() {
+            println!("│  │  │  ├─   A: \"{}\" => \"{}\"", attr.name(), attr.value());
+        }
+
+        match child.tag_name().name() {
+            // Text Run
+            "r" => {
+                position = process_text_run_element(context, &child, position, &text_settings);
+            }
+
+            _ => ()
+        }
+    }
+
+    position
+}
+
 fn process_pragraph_element(context: &mut Context,
                             node: &xml::Node, 
                             original_position: Vector2f, 
@@ -204,6 +232,11 @@ fn process_pragraph_element(context: &mut Context,
         println!("│  ├─ {}", child.tag_name().name());
 
         match child.tag_name().name() {
+            // 17.16.22 hyperlink (Hyperlink)
+            "hyperlink" => {
+                position = process_hyperlink_element(context, &child, position, &paragraph_text_settings);
+            }
+
             // Paragraph Properties section 17.3.1.26
             "pPr" => {
                 process_paragraph_properties_element(context, &child, &mut paragraph_text_settings);
