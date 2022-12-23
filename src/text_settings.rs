@@ -203,7 +203,7 @@ impl TextSettings {
                 "color" => {
                     for attr in run_property.attributes() {
                         println!("│  │  │  │  ├─ Color Attribute: {} => {}", attr.name(), attr.value());
-                        if attr.name() == "val" {
+                        if attr.name() == "val" && attr.value() != "auto" {
                             self.color = Some(color_parser::parse_color(attr.value()).unwrap());
                         }
                     }
