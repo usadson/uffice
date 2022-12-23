@@ -86,6 +86,7 @@ pub enum TextJustification {
 #[derive(Clone)]
 pub struct TextSettings {
     pub bold: Option<bool>,
+    pub underline: Option<bool>,
     pub font: Option<String>,
     pub color: Option<Color>,
 
@@ -106,7 +107,8 @@ fn inherit_or_original<T: Clone>(inherit: &Option<T>, original: &mut Option<T>) 
 impl TextSettings {
     pub fn new() -> Self {
         Self{ 
-            bold: None, 
+            bold: None,
+            underline: None,
             font: None,
             color: None,
             spacing_below_paragraph: None,
@@ -118,6 +120,7 @@ impl TextSettings {
 
     pub fn inherit_from(&mut self, other: &TextSettings) {
         inherit_or_original(&other.bold, &mut self.bold);
+        inherit_or_original(&other.underline, &mut self.underline);
         inherit_or_original(&other.font, &mut self.font);
         inherit_or_original(&other.color, &mut self.color);
         inherit_or_original(&other.spacing_below_paragraph, &mut self.spacing_below_paragraph);
@@ -168,13 +171,17 @@ impl TextSettings {
     }
 
     pub fn create_style(&self) -> TextStyle {
-        match self.bold {
-            None => TextStyle::REGULAR,
-            Some(bold) => match bold {
-                true => TextStyle::BOLD,
-                false => TextStyle::REGULAR
-            }
+        let mut style = TextStyle::REGULAR;
+        
+        if self.bold.unwrap_or(false) {
+            style |= TextStyle::BOLD;
         }
+
+        if self.underline.unwrap_or(false) {
+            style |= TextStyle::UNDERLINED;
+        }
+
+        style
     }
 
     pub fn apply_run_properties_element(&mut self, style_manager: &StyleManager, element: &xml::Node) {
@@ -233,6 +240,14 @@ impl TextSettings {
                             self.non_complex_text_size = Some(new_value);
                         }
                     }
+                }
+
+                "u" => {
+                    // TODO add more types (dash, dotted, etc.)
+                    self.underline = match self.underline {
+                        None => Some(true),
+                        Some(underline) => Some(!underline)
+                    };
                 }
                 _ => ()
             }
