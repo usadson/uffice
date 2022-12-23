@@ -464,7 +464,7 @@ fn process_text_element_text(context: &mut Context, text: &mut Text, text_string
             }
         }
 
-        let mut line = &text_string[start..(index + word.chars().count())];
+        let mut line = &text_string[start..(index + word.bytes().count())];
         text.set_string(line);
         let mut width = text.local_bounds().width;
 
@@ -483,7 +483,7 @@ fn process_text_element_text(context: &mut Context, text: &mut Text, text_string
 
         println!("width({}) < max_width_fitting_on_page({}) \"{}\"", width, max_width_fitting_on_page, line);
         if let Some((next_index, next_word)) = iter.peek() {
-            let line_with_next = &text_string[start..(next_index + next_word.chars().count())];
+            let line_with_next = &text_string[start..(next_index + next_word.bytes().count())];
             text.set_string(line_with_next);
             let width_with_next = text.local_bounds().width;
             text.set_string(line);
