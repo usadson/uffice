@@ -9,9 +9,20 @@ use crate::{
 };
 
 pub enum RelationshipType {
+    Unknown,
+
+    Comments,
+    CommentsExtended,
+    CommentsIds,
     CustomXml,
+    Endnotes,
     FontTable,
+    Footer,
+    Footnotes,
+    Header,
     Hyperlink,
+    Image,
+    Numbering,
     Settings,
     Styles,
     Theme,
@@ -21,14 +32,27 @@ pub enum RelationshipType {
 impl RelationshipType {
     fn convert(name: &str) -> Option<Self> {
         match name {
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" => Some(Self::Comments),
+            "http://schemas.microsoft.com/office/2011/relationships/commentsExtended" => Some(Self::CommentsExtended),
+            "http://schemas.microsoft.com/office/2016/09/relationships/commentsIds" => Some(Self::CommentsIds),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml" => Some(Self::CustomXml),
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes" => Some(Self::Endnotes),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" => Some(Self::FontTable),
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" => Some(Self::Footer),
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" => Some(Self::Footnotes),
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" => Some(Self::Header),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" => Some(Self::Hyperlink),
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/webSettings" => Some(Self::WebSettings),
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" => Some(Self::Image),
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" => Some(Self::Numbering),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" => Some(Self::Styles),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" => Some(Self::Settings),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" => Some(Self::Theme),
-            _ => None
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/webSettings" => Some(Self::WebSettings),
+            _ => {
+                //assert!(false);
+                println!("UNKNWON TYPE: {}", name);
+                Some(Self::Unknown)
+            }
         }
     }
 }
@@ -58,9 +82,17 @@ impl Relationships {
             if relationship_xml.tag_name().name() != "Relationship" {
                 continue;
             }
+            
+            println!("Relationship");
+            for attr in relationship_xml.attributes() {
+                println!("- Attribute \"{}\"  =>  \"{}\"      ns={}", attr.name(), attr.value(), attr.namespace().unwrap_or(""));
+            }
+
+            let relation_type = relationship_xml.attribute("Type");
+            let relation_type = RelationshipType::convert(relation_type.unwrap());
 
             relationships.insert(String::from(relationship_xml.attribute("Id").unwrap()), Relationship{
-                relation_type: RelationshipType::convert(relationship_xml.attribute("Type").unwrap()).unwrap(),
+                relation_type: relation_type.unwrap(),
                 target: String::from(relationship_xml.attribute("Target").unwrap()),
             });
         }
