@@ -19,6 +19,7 @@ roxmltree = "*"
 sfml = "*"
 structopt = "*"
 unicode-segmentation = "*"
+url = "*"
 zip = "*"
 
 [target.'cfg(windows)'.dependencies]

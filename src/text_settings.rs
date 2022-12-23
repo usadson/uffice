@@ -20,6 +20,18 @@ impl Size {
 }
 
 #[derive(Clone, Copy)]
+pub struct Position {
+    pub x: u32,
+    pub y: u32,
+}
+
+impl Position {
+    pub fn new(x: u32, y: u32) -> Self {
+        Self { x, y }
+    }
+}
+
+#[derive(Clone, Copy)]
 pub struct Rect {
     pub left: u32,
     pub right: u32,
@@ -30,6 +42,23 @@ pub struct Rect {
 impl Rect {
     pub fn empty() -> Self {
         Rect { left: 0, right: 0, top: 0, bottom: 0 }
+    }
+
+    pub fn is_inside_inclusive(&self, position: Position) -> bool {
+        position.x >= self.left && position.x <= self.right
+            && position.y >= self.top && position.y <= self.bottom
+    }
+}
+
+impl From<sfml::graphics::Rect<f32>> for Rect {
+    fn from(some: sfml::graphics::Rect<f32>) -> Self {
+        Self{
+            left: some.left as u32,
+            right: (some.left + some.width) as u32,
+
+            top: some.top as u32,
+            bottom: (some.top + some.height) as u32,
+        }
     }
 }
 

@@ -9,14 +9,19 @@ use std::sync::atomic::Ordering;
 
 use roxmltree as xml;
 
+use sfml::SfBox;
 use sfml::graphics::*;
 use sfml::system::Vector2f;
 use sfml::window::*;
 
 use notify::{Watcher, RecursiveMode};
 
+use crate::interactable::Interactable;
+use crate::relationships::Relationships;
 use crate::style::StyleManager;
+use crate::text_settings::Position;
 use crate::word_processing;
+use crate::word_processing::DocumentResult;
 
 pub const SCROLL_BAR_WIDTH: f32 = 20.0;
 
@@ -27,7 +32,7 @@ fn load_archive_file_to_string(archive: &mut zip::ZipArchive<std::fs::File>, nam
 }
 
 // A4: 210 × 297
-fn draw_document(archive_path: &str) -> RenderTexture {
+fn draw_document(archive_path: &str) -> DocumentResult {
     let archive_file = std::fs::File::open(archive_path)
             .expect("Failed to open specified file");
 
@@ -38,6 +43,17 @@ fn draw_document(archive_path: &str) -> RenderTexture {
         let file = archive.by_index(i).unwrap();
         println!("[Document] ZIP: File: {}", file.name());
     }
+    
+    let document_relationships;
+    {
+        let txt = load_archive_file_to_string(&mut archive, "word/_rels/document.xml.rels");
+        if let Ok(document) = xml::Document::parse(&txt) {
+            document_relationships = Relationships::load_xml(&document).unwrap();
+        } else {
+            println!("[Relationships] (word/_rels/document.xml.rels) Error!");
+            document_relationships = Relationships::empty();
+        }
+    }
 
     let styles_document_text = load_archive_file_to_string(&mut archive, "word/styles.xml");
     let styles_document = xml::Document::parse(&styles_document_text)
@@ -47,7 +63,7 @@ fn draw_document(archive_path: &str) -> RenderTexture {
     let document_text = load_archive_file_to_string(&mut archive, "word/document.xml");
     let document = xml::Document::parse(&document_text)
             .expect("Failed to parse document");
-    word_processing::process_document(&document, &style_manager)
+    word_processing::process_document(&document, &style_manager, &document_relationships)
 }
 
 struct Scroller {
@@ -117,9 +133,14 @@ pub struct Application {
     watcher: notify::RecommendedWatcher,
 
     window: RenderWindow,
+    cursor: SfBox<Cursor>,
 
     is_draw_invalidated: Arc<AtomicBool>,
     scroller: Scroller,
+
+    scale: f32,
+    document_rect: Rect<f32>,
+    interactables: Vec<Box<dyn Interactable>>,
 }
 
 impl Application {
@@ -151,9 +172,56 @@ impl Application {
             archive_path: archive_path.clone(),
             watcher,
             window,
+            cursor: Cursor::from_system(CursorType::Arrow).unwrap(),
             is_draw_invalidated,
-            scroller: Scroller::new()
+            scroller: Scroller::new(),
+            scale: 0.0,
+            document_rect: sfml::graphics::Rect::<f32>::new(0.0, 0.0, 0.0, 0.0),
+            interactables: vec![],
         }
+    }
+
+    pub fn check_interactable_for_mouse(&mut self, mouse_position: Vector2f, callback: &dyn Fn(Position, &mut Box<dyn Interactable>)) -> usize {
+        if !self.document_rect.contains(mouse_position) {
+            return 0;
+        }
+
+        println!("[ClickEvent]     Inside document rect!");
+        let mouse_position = Position::new(
+            ((mouse_position.x - self.document_rect.left) / self.scale) as u32, 
+            ((mouse_position.y - self.document_rect.top) / self.scale) as u32
+        );
+
+        println!("[ClickEvent]       Scaled Mouse Position = {} x {}", mouse_position.x, mouse_position.y);
+
+        let mut interactables_hit = 0;
+
+        let mut iter = self.interactables.iter_mut();
+        while let Some(interactable) = iter.next() {
+            println!("[ClickEvent]         Some Interactable");
+
+            let mut has_hit = false;
+            for rect in &interactable.interation_state().rects {
+                println!("[ClickEvent]           Rect @ x {} to {}, y {} to {}", rect.left, rect.right, rect.top, rect.bottom);
+                println!("{} {} {} {}",
+                            mouse_position.x >= rect.left,
+                            mouse_position.x <= rect.right,
+                            mouse_position.y >= rect.top,
+                            mouse_position.y <= rect.bottom);
+                if rect.is_inside_inclusive(mouse_position) {
+                    has_hit = true;
+                    break;
+                }
+            }
+            
+            if has_hit {
+                println!("[ClickEvent]             HIT!");
+                interactables_hit += 1;
+                callback(mouse_position, interactable);
+            }
+        }
+
+        interactables_hit
     }
 
     pub fn run(&mut self) {
@@ -162,6 +230,8 @@ impl Application {
         let mut shape = sfml::graphics::RectangleShape::new();
         let mut left_button_pressed = false;
         let mut mouse_position = Vector2f::new(0.0, 0.0);
+
+        let mut current_cursor_type = CursorType::Arrow;
 
         while self.window.is_open() {
             let window_size = self.window.size();
@@ -192,9 +262,19 @@ impl Application {
                             if button == sfml::window::mouse::Button::Left {
                                 mouse_position = Vector2f::new(x as f32, y as f32);
 
+                                println!("[ClickEvent] @ {} x {}", x, y);
+
                                 if self.scroller.bar_rect.contains(mouse_position) {
                                     left_button_pressed = true;
                                 }
+
+                                println!("[ClickEvent]   Document Rect @ {} x {}  w {}  h{}", self.document_rect.left, self.document_rect.top, 
+                                        self.document_rect.width, self.document_rect.height);
+                                self.check_interactable_for_mouse(mouse_position, 
+                                    &|mouse_position, interactable| {
+                                        interactable.on_click(mouse_position);
+                                    }
+                                );
                             }
                         }
                         Event::MouseButtonReleased { button, x: _, y: _ } => {
@@ -208,14 +288,44 @@ impl Application {
                             }
                             
                             mouse_position = Vector2f::new(x as f32, y as f32);
+
+                            // for interactable in &mut self.interactables {
+                            //     interactable.interation_state_mut().is_hovering = false;
+                            // }
+
+                            // self.check_interactable_for_mouse(mouse_position, 
+                            //     &|_, interactable| {
+                            //         interactable.interation_state_mut().is_hovering = true;
+                            //     }
+                            // );
                         }
                         _ => (),
                     }
                 }
             }
+
+            for interactable in &self.interactables {
+                if interactable.interation_state().is_hovering {
+                    if let Some(cursor_type) = interactable.interation_state().cursor_on_hover {
+                        if cursor_type == current_cursor_type {
+                            continue;
+                        }
+
+                        current_cursor_type = cursor_type;
+                        self.cursor = Cursor::from_system(cursor_type).unwrap();
+                        unsafe {
+                            self.window.set_mouse_cursor(&self.cursor);
+                        }
+
+                        break;
+                    }
+                }
+            }
             
             if self.is_draw_invalidated.swap(false, Ordering::Relaxed) {
-                texture = draw_document(&self.archive_path);
+                let (new_texture, new_interactables) = draw_document(&self.archive_path);
+                texture = new_texture;
+                self.interactables = new_interactables;
             }
             
             self.window.clear(Color::BLACK);
@@ -232,9 +342,9 @@ impl Application {
                 let page_size = sprite.texture_rect().width as f32;
                 let factor = 1.0 / 5.0 * 4.0;
 
-                let scale = full_size * factor / page_size;
-                let centered_x = (full_size - page_size * scale) / 2.0;
-                sprite.set_scale((scale, scale));
+                self.scale = full_size * factor / page_size;
+                let centered_x = (full_size - page_size * self.scale) / 2.0;
+                sprite.set_scale((self.scale, self.scale));
             
                 sprite.set_position((
                     centered_x,
@@ -243,6 +353,7 @@ impl Application {
 
                 self.scroller.document_height = sprite.global_bounds().height;
 
+                self.document_rect = sprite.global_bounds();
                 self.window.draw(&sprite);
             }
 
@@ -251,5 +362,7 @@ impl Application {
     
             self.window.display();
         }
+
+        self.window.close();
     }
 }

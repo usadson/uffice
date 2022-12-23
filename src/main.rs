@@ -5,6 +5,8 @@ mod application;
 mod color_parser;
 mod error;
 mod fonts;
+mod interactable;
+mod relationships;
 mod style;
 mod text_settings;
 mod word_processing;

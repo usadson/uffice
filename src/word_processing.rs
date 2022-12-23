@@ -6,6 +6,7 @@ use std::{path::Path, process::exit};
  */
 
 use roxmltree as xml;
+use uffice_lib::namespaces::XMLNS_RELATIONSHIPS;
 use unicode_segmentation::UnicodeSegmentation;
 
 use sfml::{
@@ -17,9 +18,9 @@ use crate::{
     *, 
     text_settings::{
         PageSettings, 
-        Size, TextJustification
+        Size, TextJustification, Rect
     }, 
-    error::Error
+    error::Error, interactable::Interactable, relationships::Relationships
 };
 
 const CORE_FACTOR: f32 = 3.0f32;
@@ -33,6 +34,7 @@ struct Context<'a> {
 
     font_source: font_kit::sources::multi::MultiSource,
 
+    document_relationships: &'a Relationships,
     style_manager: &'a StyleManager,
     page_settings: PageSettings,
 
@@ -41,6 +43,12 @@ struct Context<'a> {
     render_texture: &'a mut sfml::graphics::RenderTexture,
 
     paragraph_current_line_height: Option<f32>,
+
+    interactables: &'a mut Vec<Box<dyn Interactable>>,
+
+    // When this has a value, this vec should be populated with rects that cover
+    // visible sections on the document (e.g. text).
+    collection_rects: Option<Vec<Rect>>,
 }
 
 impl<'a> Context<'a> {
@@ -103,6 +111,13 @@ fn paint_text(context: &mut Context, text: &mut sfml::graphics::Text, text_setti
         paint_text_highlight(context, text, highlight_color);
     }
 
+    match &mut context.collection_rects {
+        Some(rects) => {
+            rects.push(text.global_bounds().into());
+        }
+        _ => ()
+    }
+
     context.render_texture.draw(text);
 }
 
@@ -115,10 +130,19 @@ fn paint_text_highlight(context: &mut Context, text: &mut sfml::graphics::Text, 
     shape.set_size(Vector2f::new(size.x, text.character_size() as f32 + 30.0));
     shape.set_fill_color(highlight_color);
 
+    match &mut context.collection_rects {
+        Some(rects) => {
+            rects.push(shape.global_bounds().into());
+        }
+        _ => ()
+    } 
+
     context.render_texture.draw(&shape);
 }
 
-pub fn process_document(document: &xml::Document, style_manager: &StyleManager) -> sfml::graphics::RenderTexture {
+pub type DocumentResult = (sfml::graphics::RenderTexture, Vec<Box<dyn Interactable>>);
+
+pub fn process_document(document: &xml::Document, style_manager: &StyleManager, document_relationships: &Relationships) -> DocumentResult {
     let text_settings = style_manager.default_text_settings();
     //text_settings.font = Some(String::from("Calibri"));
 
@@ -146,17 +170,23 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager) 
 
     render_texture.clear(Color::WHITE);
 
+    let mut interactables = vec![];
+
     let mut context = Context{
         document,
         font_source: font_kit::sources::multi::MultiSource::from_sources(resolve_font_sources()),
 
+        document_relationships,
         style_manager,
         page_settings,
         
         render_size,
         render_texture: &mut render_texture,
 
-        paragraph_current_line_height: None
+        paragraph_current_line_height: None,
+        
+        interactables: &mut interactables,
+        collection_rects: None,
     };
 
     for child in document.root_element().children() {
@@ -170,7 +200,7 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager) 
     render_texture.display();
     render_texture.set_smooth(true);
 
-    render_texture
+    (render_texture, interactables)
 }
 
 fn process_body_element(context: &mut Context,
@@ -196,6 +226,9 @@ fn process_hyperlink_element(context: &mut Context,
     for attr in node.attributes() {
         println!("│  │  ├─ A: \"{}\" => \"{}\"", attr.name(), attr.value());
     }
+    
+    assert!(context.collection_rects.is_none());
+    context.collection_rects = Some(vec![]);
 
     for child in node.children() {
         println!("│  │  │  ├─ HC: {}", child.tag_name().name());
@@ -213,6 +246,35 @@ fn process_hyperlink_element(context: &mut Context,
             _ => ()
         }
     }
+
+    let rects = context.collection_rects.take();
+    assert!(context.collection_rects.is_none());
+    
+    let rects = rects.unwrap();
+    assert!(!rects.is_empty());
+
+    let mut href = String::from("");
+    if let Some(relationship_id) = node.attribute((XMLNS_RELATIONSHIPS, "id")) {
+        if let Some(relationship) = context.document_relationships.find(relationship_id) {
+            href = relationship.target.clone();
+        } else {
+            println!("[WARNING] <w:hyperlink> relationship not found: \"{}\" (out of {} relationship(s))",
+                relationship_id, context.document_relationships.len());
+        }
+    } else {
+        println!("[WARNING] <w:hyperlink> doesn't have an r:id attribute!");
+    }
+
+    context.interactables.push(Box::new(
+        interactable::Link::new(
+            interactable::SharedInteractionState { 
+                rects,
+                cursor_on_hover: Some(sfml::window::CursorType::Hand),
+                is_hovering: false,
+            },
+            href
+        )
+    ));
 
     position
 }
