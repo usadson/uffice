@@ -5,7 +5,7 @@ use font_kit::family_name::FamilyName;
 use roxmltree as xml;
 use sfml::graphics::{Color, TextStyle, Font, Text};
 
-use crate::{word_processing::HALF_POINT, color_parser, WORD_PROCESSING_XML_NAMESPACE};
+use crate::{word_processing::HALF_POINT, color_parser, WORD_PROCESSING_XML_NAMESPACE, style::StyleManager};
 
 #[derive(Clone, Copy)]
 pub struct Size {
@@ -177,7 +177,7 @@ impl TextSettings {
         }
     }
 
-    pub fn apply_run_properties_element(&mut self, element: &xml::Node) {
+    pub fn apply_run_properties_element(&mut self, style_manager: &StyleManager, element: &xml::Node) {
         assert_eq!(element.tag_name().name(), "rPr");
     
         for run_property in element.children() {
@@ -217,6 +217,13 @@ impl TextSettings {
                         }
                     }
                 }
+
+                "rStyle" => {
+                    let val = run_property.attribute((WORD_PROCESSING_XML_NAMESPACE, "val"))
+                            .expect("No w:val on a <w:highlight> element!");
+                    style_manager.apply_character_style(val, self);
+                }
+
                 "sz" => {
                     for attr in run_property.attributes() {
                         println!("│  │  │  │  ├─ Size Attribute: {} => {}", attr.name(), attr.value());

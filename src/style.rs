@@ -65,7 +65,7 @@ impl Style {
                 }
                 "rPr" => {
                     let mut settings = style.text_settings;
-                    settings.apply_run_properties_element(&child);
+                    settings.apply_run_properties_element(manager, &child);
                     style.text_settings = settings;
                 }
                 _ => ()
@@ -103,7 +103,11 @@ fn process_xml_rpr_default(element: &xml::Node, manager: &mut StyleManager) {
         println!("Style⟫ │  │  ├─ {}", child.tag_name().name());
         match child.tag_name().name() {
             "rPr" => {
-                manager.default_text_settings.apply_run_properties_element(&child);
+                let mut settings = manager.default_text_settings.clone();
+                
+                settings.apply_run_properties_element(manager, &child);
+
+                manager.default_text_settings = settings;
             }
             _ => ()
         }
@@ -164,6 +168,12 @@ impl StyleManager {
     pub fn apply_paragraph_style(&self, style_id: &str, paragraph_text_settings: &mut TextSettings) {
         if let Some(style) = self.styles.get(style_id) {
             paragraph_text_settings.inherit_from(&style.text_settings);
+        }
+    }
+
+    pub fn apply_character_style(&self, style_id: &str, text_settings: &mut TextSettings) {
+        if let Some(style) = self.styles.get(style_id) {
+            text_settings.inherit_from(&style.text_settings);
         }
     }
 

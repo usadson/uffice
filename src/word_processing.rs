@@ -552,7 +552,7 @@ fn process_text_run_element(context: &mut Context,
         }
 
         if text_run_property.tag_name().name() == "rPr" {
-            run_text_settings.apply_run_properties_element(&text_run_property);
+            run_text_settings.apply_run_properties_element(context.style_manager, &text_run_property);
         }
 
         if text_run_property.tag_name().name() == "t" {
