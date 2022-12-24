@@ -11,6 +11,7 @@ mod structured_document_tag;
 mod style;
 mod text_settings;
 mod word_processing;
+mod wp;
 
 use sfml::graphics::*;
 

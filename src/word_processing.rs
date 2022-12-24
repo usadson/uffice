@@ -1,4 +1,4 @@
-use std::{path::Path, process::exit};
+use std::{path::Path, process::exit, cell::RefCell, rc::Rc};
 
 /**
  * Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
@@ -20,7 +20,13 @@ use crate::{
         PageSettings, 
         Size, TextJustification, Rect
     }, 
-    error::Error, interactable::Interactable, relationships::Relationships, structured_document_tag::StructuredDocumentTag
+    error::Error, 
+    interactable::Interactable, 
+    relationships::Relationships, 
+    structured_document_tag::StructuredDocumentTag, 
+    wp::{
+        Document, Node, painter::Painter
+    }
 };
 
 const CORE_FACTOR: f32 = 3.0f32;
@@ -49,6 +55,10 @@ struct Context<'a> {
     // When this has a value, this vec should be populated with rects that cover
     // visible sections on the document (e.g. text).
     collection_rects: Option<Vec<Rect>>,
+
+    // Page number, starting from 0!
+    current_page: usize,
+    doc: Rc<RefCell<Node>>,
 }
 
 impl<'a> Context<'a> {
@@ -106,40 +116,6 @@ fn load_page_settings(document: &xml::Document) -> Result<PageSettings, Error> {
     panic!("No direct child \"sectPr\" of root element found :(");
 }
 
-fn paint_text(context: &mut Context, text: &mut sfml::graphics::Text, text_settings: &TextSettings) {
-    if let Some(highlight_color) = text_settings.highlight_color {
-        paint_text_highlight(context, text, highlight_color);
-    }
-
-    match &mut context.collection_rects {
-        Some(rects) => {
-            rects.push(text.global_bounds().into());
-        }
-        _ => ()
-    }
-
-    context.render_texture.draw(text);
-}
-
-fn paint_text_highlight(context: &mut Context, text: &mut sfml::graphics::Text, highlight_color: Color) {
-    let mut shape = RectangleShape::new();
-
-    shape.set_position(text.position());
-
-    let size = text.local_bounds().size();
-    shape.set_size(Vector2f::new(size.x, text.character_size() as f32 + 30.0));
-    shape.set_fill_color(highlight_color);
-
-    match &mut context.collection_rects {
-        Some(rects) => {
-            rects.push(shape.global_bounds().into());
-        }
-        _ => ()
-    } 
-
-    context.render_texture.draw(&shape);
-}
-
 pub type DocumentResult = (sfml::graphics::RenderTexture, Vec<Box<dyn Interactable>>);
 
 pub fn process_document(document: &xml::Document, style_manager: &StyleManager, document_relationships: &Relationships) -> DocumentResult {
@@ -172,6 +148,8 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager, 
 
     let mut interactables = vec![];
 
+    let doc = Rc::new(RefCell::new(Document::new(text_settings.clone(), page_settings.clone())));
+
     let mut context = Context{
         document,
         font_source: font_kit::sources::multi::MultiSource::from_sources(resolve_font_sources()),
@@ -187,23 +165,38 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager, 
         
         interactables: &mut interactables,
         collection_rects: None,
+
+        current_page: 0,
+        doc: doc.clone()
     };
 
     for child in document.root_element().children() {
         println!("{}", child.tag_name().name());
-
+        
         if child.tag_name().name() == "body" {
-            position = process_body_element(&mut context, &child, position, &text_settings);
+            position = process_body_element(&mut context, &mut doc.borrow_mut(), &child, position, &text_settings);
         }
     }
+    
+    let mut font_source = context.font_source;
 
     render_texture.display();
     render_texture.set_smooth(true);
+
+    {
+        let mut painter = Painter{
+            font_source: &mut font_source,
+            render_texture: &mut render_texture,
+        };
+
+        doc.borrow_mut().on_event(&mut wp::Event::Paint(&mut painter));
+    }
 
     (render_texture, interactables)
 }
 
 fn process_body_element(context: &mut Context,
+                        parent: &mut wp::Node,
                         node: &xml::Node, 
                         position: Vector2f, 
                         text_settings: &crate::text_settings::TextSettings) -> Vector2f {
@@ -212,7 +205,7 @@ fn process_body_element(context: &mut Context,
     for child in node.children() {
         println!("├─ {}", child.tag_name().name());
         match child.tag_name().name() {
-            "p" => position = process_pragraph_element(context, &child, position, text_settings),
+            "p" => position = process_pragraph_element(context, parent, &child, position, text_settings),
             "sdt" => position = process_structured_document_tag(context, &child, position, text_settings),
             _ => ()
         }
@@ -222,15 +215,24 @@ fn process_body_element(context: &mut Context,
 }
 
 fn process_hyperlink_element(context: &mut Context, 
+                             parent: &mut Node,
                              node: &xml::Node,
-                             mut position: Vector2f,
-                             text_settings: &crate::text_settings::TextSettings) -> Vector2f {
+                             mut position: Vector2f) -> Vector2f {
     for attr in node.attributes() {
         println!("│  │  ├─ A: \"{}\" => \"{}\"", attr.name(), attr.value());
     }
     
     assert!(context.collection_rects.is_none());
     context.collection_rects = Some(vec![]);
+
+    let mut hyperlink = parent.append_child(wp::Node{
+        data: wp::NodeData::Hyperlink(),
+        page: context.current_page,
+        position,
+        text_settings: parent.text_settings.clone(),
+        size: Vector2f::new(0.0, 0.0),
+        children: Some(vec![]),
+    });
 
     for child in node.children() {
         println!("│  │  │  ├─ HC: {}", child.tag_name().name());
@@ -242,7 +244,7 @@ fn process_hyperlink_element(context: &mut Context,
         match child.tag_name().name() {
             // Text Run
             "r" => {
-                position = process_text_run_element(context, &child, position, &text_settings);
+                position = process_text_run_element(context, hyperlink, &child, position);
             }
 
             _ => ()
@@ -253,7 +255,7 @@ fn process_hyperlink_element(context: &mut Context,
     assert!(context.collection_rects.is_none());
     
     let rects = rects.unwrap();
-    assert!(!rects.is_empty());
+//    assert!(!rects.is_empty());
 
     let mut href = String::from("");
     if let Some(relationship_id) = node.attribute((XMLNS_RELATIONSHIPS, "id")) {
@@ -282,6 +284,7 @@ fn process_hyperlink_element(context: &mut Context,
 }
 
 fn process_pragraph_element(context: &mut Context,
+                            parent: &mut Node,
                             node: &xml::Node, 
                             original_position: Vector2f, 
                             text_settings: &crate::text_settings::TextSettings) -> Vector2f {
@@ -290,7 +293,16 @@ fn process_pragraph_element(context: &mut Context,
     context.paragraph_current_line_height = None;
     position.x = context.page_settings.margins.left as f32 * TWELFTEENTH_POINT;
 
-    let mut paragraph_text_settings = text_settings.clone();
+    let mut paragraph = parent.append_child(wp::Node {
+        data: wp::NodeData::Paragraph(wp::Paragraph {
+            // ...
+        }),
+        page: context.current_page,
+        position: original_position,
+        text_settings: text_settings.clone(),
+        size: Vector2f::new(0.0, 0.0),
+        children: Some(vec![]),
+    });
 
     for child in node.children() {
         println!("│  ├─ {}", child.tag_name().name());
@@ -298,25 +310,25 @@ fn process_pragraph_element(context: &mut Context,
         match child.tag_name().name() {
             // 17.16.22 hyperlink (Hyperlink)
             "hyperlink" => {
-                position = process_hyperlink_element(context, &child, position, &paragraph_text_settings);
+                position = process_hyperlink_element(context, paragraph, &child, position);
             }
 
             // Paragraph Properties section 17.3.1.26
             "pPr" => {
-                process_paragraph_properties_element(context, &child, &mut paragraph_text_settings);
+                process_paragraph_properties_element(context, paragraph, &child);
             }
 
             // Text Run
             "r" => {
-                position = process_text_run_element(context, &child, position, &paragraph_text_settings);
+                position = process_text_run_element(context, paragraph, &child, position);
             }
 
             _ => ()
         }
     }
 
-    let font = paragraph_text_settings.load_font(&context.font_source);
-    let text = paragraph_text_settings.create_text(&font);
+    let font = paragraph.text_settings.load_font(&context.font_source);
+    let text = paragraph.text_settings.create_text(&font);
 
     // The cursor is probably somewhere in the middle of the line.
     // We should put it at the next line.
@@ -333,7 +345,7 @@ fn process_pragraph_element(context: &mut Context,
         line_spacing = text.line_spacing() as f32 * HALF_POINT;
     }
 
-    let paragraph_spacing = paragraph_text_settings.spacing_below_paragraph.unwrap_or(0.0);
+    let paragraph_spacing = paragraph.text_settings.spacing_below_paragraph.unwrap_or(0.0);
 
     assert!(line_spacing >= 0.0);
     assert!(paragraph_spacing >= 0.0);
@@ -341,11 +353,15 @@ fn process_pragraph_element(context: &mut Context,
     println!("│  ├─ Advancing {}  +  {}", line_spacing, paragraph_spacing);
     position.y += line_spacing + paragraph_spacing;
 
+    paragraph.size = position - original_position;
+
     position
 }
 
 // pPr
-fn process_paragraph_properties_element(context: &Context, node: &xml::Node, paragraph_text_settings: &mut TextSettings) {
+fn process_paragraph_properties_element(context: &Context, paragraph: &mut wp::Node, node: &xml::Node) {
+    let paragraph_text_settings = &mut paragraph.text_settings;
+
     for property in node.children() {
         println!("│  │  ├─ {}", property.tag_name().name());
         for attr in property.attributes() {
@@ -502,28 +518,37 @@ fn process_structured_document_tag(context: &mut Context,
 
 /// Process the w:t element.
 fn process_text_element(context: &mut Context,
+                        parent: &mut Node,
                         node: &xml::Node, 
-                        position: Vector2f, 
-                        run_text_settings: &TextSettings) -> Vector2f {
+                        position: Vector2f) -> Vector2f {
     let mut position = position;
+
+    let mut text_node = parent.append_child(wp::Node {
+        data: wp::NodeData::Text(),
+        page: context.current_page,
+        position,
+        text_settings: parent.text_settings.clone(),
+        size: Vector2f::new(0.0, 0.0),
+        children: Some(vec![]),
+    });
 
     for child in node.children() {
         if child.node_type() == xml::NodeType::Text {
             let text_string = child.text().unwrap();
             println!("│  │  │  ├─ Text: \"{}\"", text_string);
 
-            let font = run_text_settings.load_font(&context.font_source);
+            let font = text_node.text_settings.load_font(&context.font_source);
             
-            let mut text = run_text_settings.create_text(&font);
+            let mut text = text_node.text_settings.create_text(&font);
 
-            position = process_text_element_text(context, &mut text, text_string, position, run_text_settings);
+            position = process_text_element_text(context, text_node, &mut text, text_string, position);
         }
     }
 
     position
 }
 
-fn process_text_element_text(context: &mut Context, text: &mut Text, text_string: &str, original_position: Vector2f, text_settings: &TextSettings) -> Vector2f {
+fn process_text_element_text(context: &mut Context, parent: &mut Node, text: &mut Text, text_string: &str, original_position: Vector2f) -> Vector2f {
     #[derive(Debug)]
     enum LineStopReason {
         /// The end of the text was reached. This could also very well mean the
@@ -606,19 +631,29 @@ fn process_text_element_text(context: &mut Context, text: &mut Text, text_string
         println!("│  │  │  │  ├─ Line: \"{}\", stop_reason={:?}", line, stop_reason);
         println!("│  │  │  │  ├─ Calculation: x={} w={} m={}", position.x, width, max_width_fitting_on_page);
 
-        text.set_position(
-            match text_settings.justify.unwrap_or(TextJustification::Start) {
-                TextJustification::Start => position,
-                TextJustification::Center => Vector2f::new(
-                    page_horizontal_start + (page_horizontal_end - page_horizontal_start - width) / 2.0,
-                     position.y
-                ),
-                TextJustification::End => Vector2f::new(page_horizontal_end - width, position.y)
-            }
-        );
+        let text_part = parent.append_child(wp::Node {
+            data: wp::NodeData::TextPart(wp::TextPart{
+                text: String::from(line),
+            }),
+            page: context.current_page,
+            position,
+            text_settings: parent.text_settings.clone(),
+            size: Vector2f::new(0.0, 0.0),
+            children: Some(vec![]),
+        });
 
-        paint_text(context, text, text_settings);
+        text_part.position = match text_part.text_settings.justify.unwrap_or(TextJustification::Start) {
+            TextJustification::Start => position,
+            TextJustification::Center => Vector2f::new(
+                page_horizontal_start + (page_horizontal_end - page_horizontal_start - width) / 2.0,
+                    position.y
+            ),
+            TextJustification::End => Vector2f::new(page_horizontal_end - width, position.y)
+        };
+
+        //paint_text(context, text, text_settings);
         context.add_line_height_candidate(text.global_bounds().height);
+
         position.x += width;
 
         previous_stop_reason = Some(stop_reason);
@@ -629,12 +664,20 @@ fn process_text_element_text(context: &mut Context, text: &mut Text, text_string
 }
 
 fn process_text_run_element(context: &mut Context,
+                            parent: &mut Node,
                             node: &xml::Node, 
-                            position: Vector2f, 
-                            paragraph_text_settings: &TextSettings) -> Vector2f {
-    let mut run_text_settings = paragraph_text_settings.clone();
-
+                            position: Vector2f) -> Vector2f {
     let mut position = position;
+
+    let mut text_run = parent.append_child(wp::Node{
+        data: wp::NodeData::TextRun(),
+
+        page: context.current_page,
+        position,
+        text_settings: parent.text_settings.clone(),
+        size: Vector2f::new(0.0, 0.0),
+        children: Some(vec![]),
+    });
 
     for text_run_property in node.children() {
         println!("│  │  ├─ {}", text_run_property.tag_name().name());
@@ -644,11 +687,11 @@ fn process_text_run_element(context: &mut Context,
         }
 
         if text_run_property.tag_name().name() == "rPr" {
-            run_text_settings.apply_run_properties_element(context.style_manager, &text_run_property);
+            text_run.text_settings.apply_run_properties_element(context.style_manager, &text_run_property);
         }
 
         if text_run_property.tag_name().name() == "t" {
-            position = process_text_element(context, &text_run_property, position, &run_text_settings);
+            position = process_text_element(context, text_run, &text_run_property, position);
         }
     }
 

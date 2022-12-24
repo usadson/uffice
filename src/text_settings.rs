@@ -7,7 +7,7 @@ use sfml::graphics::{Color, TextStyle, Font, Text};
 
 use crate::{word_processing::HALF_POINT, color_parser, WORD_PROCESSING_XML_NAMESPACE, style::StyleManager};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Size {
     pub width: u32,
     pub height: u32,
@@ -19,7 +19,7 @@ impl Size {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Position {
     pub x: u32,
     pub y: u32,
@@ -31,7 +31,7 @@ impl Position {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Rect {
     pub left: u32,
     pub right: u32,
@@ -62,7 +62,7 @@ impl From<sfml::graphics::Rect<f32>> for Rect {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct PageSettings {
     pub size: Size,
     pub margins: Rect,
@@ -83,7 +83,7 @@ pub enum TextJustification {
     End,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TextSettings {
     pub bold: Option<bool>,
     pub underline: Option<bool>,
