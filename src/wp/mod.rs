@@ -3,16 +3,27 @@
 
 pub mod painter;
 
+use std::{
+    rc::Rc, 
+    cell::RefCell
+};
+
 use sfml::system::Vector2f;
 
-use crate::text_settings::{TextSettings, PageSettings};
+use crate::{
+    text_settings::{
+        TextSettings, 
+        PageSettings, Position, Rect
+    }, 
+    relationships::Relationship
+};
 
 use self::painter::Painter;
 
 #[derive(Debug)]
 pub enum NodeData {
     Document(Document),
-    Hyperlink(),
+    Hyperlink(Hyperlink),
     Paragraph(Paragraph),
     Text(),
     TextPart(TextPart),
@@ -58,9 +69,38 @@ impl Node {
         }
 
         match &self.data {
+            NodeData::Hyperlink(hyperlink) => hyperlink.on_event(self, event),
             NodeData::TextPart(part) => part.on_event(self, event),
             _ => ()
         }
+    }
+
+    /// Returns the hit test result.
+    /// 
+    /// If Some, the vector contains the innermost to outermost nodes that were in the hit path.
+    pub fn hit_test(&mut self, position: Position, callback: &dyn Fn(&mut Node)) -> bool {
+        if let Some(children) = &mut self.children {
+            for child in children {
+                if child.hit_test(position, callback) {
+                    callback(self);
+                    return true;
+                }
+            }
+        }
+
+        match self.data {
+            NodeData::TextPart(..) => {
+                let rect = Rect::new(self.position, self.size);
+                println!("Hit testing rect {:?}", rect);
+                if rect.is_inside_inclusive(position) {
+                    callback(self);
+                    return true;
+                }
+            }
+            _ => ()
+        }
+
+        false
     }
 }
 
@@ -80,7 +120,8 @@ impl Document {
 }
 
 pub enum Event<'a> {
-    Paint(&'a mut Painter<'a>)
+    Paint(&'a mut Painter<'a>),
+    Click(Position),
 }
 
 #[derive(Debug)]
@@ -103,6 +144,56 @@ impl TextPart {
                 painter.paint_text(&self.text, node.position, &node.text_settings)
             }
             _ => ()
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Hyperlink {
+    pub relationship: Option<Rc<RefCell<Relationship>>>,
+}
+
+impl Hyperlink {
+    pub fn on_event(&self, node: &Node, event: &mut Event) {
+        if let Event::Click(..) = event {
+            if let Some(relationship) = &self.relationship {
+                let url = &relationship.borrow().target;
+                match url::Url::parse(url) {
+                    Err(e) => println!("[Interactable] (Link): \"{}\": {:?}", url, e),
+                    Ok(url) => self.open_browser(&url)
+                }
+            } else {
+                println!("[WARNING] Clicked on a link but no relationship was bound :(");
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn open_browser(&self, url: &url::Url) {
+        use std::process::Command;
+        _ = Command::new("cmd.exe")
+                .arg("/C")
+                .arg("start")
+                .arg("")
+                .arg(&url.to_string())
+                .spawn();
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn open_browser(&self, url: &url::Url) {
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", 
+              target_os = "dragonfly", target_os = "netbsd"))]
+    pub fn open_browser(&self, url: &url::Url) {
+
+    }
+}
+
+impl Default for Hyperlink {
+    fn default() -> Self {
+        Self {
+            relationship: None
         }
     }
 }

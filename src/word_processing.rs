@@ -1,13 +1,16 @@
-use std::{path::Path, process::exit, cell::RefCell, rc::Rc};
-
-/**
- * Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
- * All Rights Reserved.
- */
+// Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
+// All Rights Reserved.
 
 use roxmltree as xml;
 use uffice_lib::namespaces::XMLNS_RELATIONSHIPS;
 use unicode_segmentation::UnicodeSegmentation;
+
+use std::{
+    path::Path, 
+    process::exit, 
+    cell::RefCell, 
+    rc::Rc
+};
 
 use sfml::{
     graphics::Color,
@@ -18,12 +21,11 @@ use crate::{
     *, 
     text_settings::{
         PageSettings, 
-        Size, TextJustification, Rect
+        Size, TextJustification
     }, 
-    error::Error, 
-    interactable::Interactable, 
-    relationships::Relationships, 
-    structured_document_tag::StructuredDocumentTag, 
+    error::Error,
+    relationships::Relationships,
+    structured_document_tag::StructuredDocumentTag,
     wp::{
         Document, Node, painter::Painter
     }
@@ -46,15 +48,8 @@ struct Context<'a> {
 
     #[allow(dead_code)]
     render_size: Vector2f,
-    render_texture: &'a mut sfml::graphics::RenderTexture,
 
     paragraph_current_line_height: Option<f32>,
-
-    interactables: &'a mut Vec<Box<dyn Interactable>>,
-
-    // When this has a value, this vec should be populated with rects that cover
-    // visible sections on the document (e.g. text).
-    collection_rects: Option<Vec<Rect>>,
 
     // Page number, starting from 0!
     current_page: usize,
@@ -116,7 +111,7 @@ fn load_page_settings(document: &xml::Document) -> Result<PageSettings, Error> {
     panic!("No direct child \"sectPr\" of root element found :(");
 }
 
-pub type DocumentResult = (sfml::graphics::RenderTexture, Vec<Box<dyn Interactable>>);
+pub type DocumentResult = (sfml::graphics::RenderTexture, Rc<RefCell<Node>>);
 
 pub fn process_document(document: &xml::Document, style_manager: &StyleManager, document_relationships: &Relationships) -> DocumentResult {
     let text_settings = style_manager.default_text_settings();
@@ -146,8 +141,6 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager, 
 
     render_texture.clear(Color::WHITE);
 
-    let mut interactables = vec![];
-
     let doc = Rc::new(RefCell::new(Document::new(text_settings.clone(), page_settings.clone())));
 
     let mut context = Context{
@@ -159,13 +152,9 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager, 
         page_settings,
         
         render_size,
-        render_texture: &mut render_texture,
 
         paragraph_current_line_height: None,
         
-        interactables: &mut interactables,
-        collection_rects: None,
-
         current_page: 0,
         doc: doc.clone()
     };
@@ -192,7 +181,7 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager, 
         doc.borrow_mut().on_event(&mut wp::Event::Paint(&mut painter));
     }
 
-    (render_texture, interactables)
+    (render_texture, doc.clone())
 }
 
 fn process_body_element(context: &mut Context,
@@ -221,12 +210,9 @@ fn process_hyperlink_element(context: &mut Context,
     for attr in node.attributes() {
         println!("│  │  ├─ A: \"{}\" => \"{}\"", attr.name(), attr.value());
     }
-    
-    assert!(context.collection_rects.is_none());
-    context.collection_rects = Some(vec![]);
 
-    let mut hyperlink = parent.append_child(wp::Node{
-        data: wp::NodeData::Hyperlink(),
+    let hyperlink = parent.append_child(wp::Node{
+        data: wp::NodeData::Hyperlink(Default::default()),
         page: context.current_page,
         position,
         text_settings: parent.text_settings.clone(),
@@ -251,16 +237,11 @@ fn process_hyperlink_element(context: &mut Context,
         }
     }
 
-    let rects = context.collection_rects.take();
-    assert!(context.collection_rects.is_none());
-    
-    let rects = rects.unwrap();
-//    assert!(!rects.is_empty());
-
-    let mut href = String::from("");
     if let Some(relationship_id) = node.attribute((XMLNS_RELATIONSHIPS, "id")) {
         if let Some(relationship) = context.document_relationships.find(relationship_id) {
-            href = relationship.target.clone();
+            if let wp::NodeData::Hyperlink(hyperlink) = &mut hyperlink.data {
+                hyperlink.relationship = Some(relationship.clone());
+            }
         } else {
             println!("[WARNING] <w:hyperlink> relationship not found: \"{}\" (out of {} relationship(s))",
                 relationship_id, context.document_relationships.len());
@@ -268,17 +249,6 @@ fn process_hyperlink_element(context: &mut Context,
     } else {
         println!("[WARNING] <w:hyperlink> doesn't have an r:id attribute!");
     }
-
-    context.interactables.push(Box::new(
-        interactable::Link::new(
-            interactable::SharedInteractionState { 
-                rects,
-                cursor_on_hover: Some(sfml::window::CursorType::Hand),
-                is_hovering: false,
-            },
-            href
-        )
-    ));
 
     position
 }
@@ -638,7 +608,7 @@ fn process_text_element_text(context: &mut Context, parent: &mut Node, text: &mu
             page: context.current_page,
             position,
             text_settings: parent.text_settings.clone(),
-            size: Vector2f::new(0.0, 0.0),
+            size: text.global_bounds().size(),
             children: Some(vec![]),
         });
 

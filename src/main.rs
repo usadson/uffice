@@ -5,7 +5,6 @@ mod application;
 mod color_parser;
 mod error;
 mod fonts;
-mod interactable;
 mod relationships;
 mod structured_document_tag;
 mod style;
@@ -17,7 +16,6 @@ use sfml::graphics::*;
 
 use structopt::StructOpt;
 use style::StyleManager;
-use text_settings::TextSettings;
 
 use crate::application::Application;
 

@@ -1,6 +1,7 @@
 // Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -16,12 +17,12 @@ use sfml::window::*;
 
 use notify::{Watcher, RecursiveMode};
 
-use crate::interactable::Interactable;
 use crate::relationships::Relationships;
 use crate::style::StyleManager;
 use crate::text_settings::Position;
 use crate::word_processing;
 use crate::word_processing::DocumentResult;
+use crate::wp;
 
 pub const SCROLL_BAR_WIDTH: f32 = 20.0;
 
@@ -140,7 +141,7 @@ pub struct Application {
 
     scale: f32,
     document_rect: Rect<f32>,
-    interactables: Vec<Box<dyn Interactable>>,
+    document: Option<Rc<RefCell<wp::Node>>>,
 }
 
 impl Application {
@@ -177,13 +178,13 @@ impl Application {
             scroller: Scroller::new(),
             scale: 0.0,
             document_rect: sfml::graphics::Rect::<f32>::new(0.0, 0.0, 0.0, 0.0),
-            interactables: vec![],
+            document: None,
         }
     }
 
-    pub fn check_interactable_for_mouse(&mut self, mouse_position: Vector2f, callback: &dyn Fn(Position, &mut Box<dyn Interactable>)) -> usize {
+    pub fn check_interactable_for_mouse(&mut self, mouse_position: Vector2f) {
         if !self.document_rect.contains(mouse_position) {
-            return 0;
+            return;
         }
 
         println!("[ClickEvent]     Inside document rect!");
@@ -194,34 +195,12 @@ impl Application {
 
         println!("[ClickEvent]       Scaled Mouse Position = {} x {}", mouse_position.x, mouse_position.y);
 
-        let mut interactables_hit = 0;
+        let doc = self.document.as_ref().unwrap();
+        let mut document = doc.borrow_mut();
 
-        let mut iter = self.interactables.iter_mut();
-        while let Some(interactable) = iter.next() {
-            println!("[ClickEvent]         Some Interactable");
-
-            let mut has_hit = false;
-            for rect in &interactable.interation_state().rects {
-                println!("[ClickEvent]           Rect @ x {} to {}, y {} to {}", rect.left, rect.right, rect.top, rect.bottom);
-                println!("{} {} {} {}",
-                            mouse_position.x >= rect.left,
-                            mouse_position.x <= rect.right,
-                            mouse_position.y >= rect.top,
-                            mouse_position.y <= rect.bottom);
-                if rect.is_inside_inclusive(mouse_position) {
-                    has_hit = true;
-                    break;
-                }
-            }
-            
-            if has_hit {
-                println!("[ClickEvent]             HIT!");
-                interactables_hit += 1;
-                callback(mouse_position, interactable);
-            }
-        }
-
-        interactables_hit
+        document.hit_test(mouse_position, &|node| {
+            node.on_event(&mut wp::Event::Click(mouse_position));
+        });
     }
 
     pub fn run(&mut self) {
@@ -231,7 +210,7 @@ impl Application {
         let mut left_button_pressed = false;
         let mut mouse_position = Vector2f::new(0.0, 0.0);
 
-        let mut current_cursor_type = CursorType::Arrow;
+        // let mut current_cursor_type = CursorType::Arrow;
 
         while self.window.is_open() {
             let window_size = self.window.size();
@@ -270,11 +249,7 @@ impl Application {
 
                                 println!("[ClickEvent]   Document Rect @ {} x {}  w {}  h{}", self.document_rect.left, self.document_rect.top, 
                                         self.document_rect.width, self.document_rect.height);
-                                self.check_interactable_for_mouse(mouse_position, 
-                                    &|mouse_position, interactable| {
-                                        interactable.on_click(mouse_position);
-                                    }
-                                );
+                                self.check_interactable_for_mouse(mouse_position);
                             }
                         }
                         Event::MouseButtonReleased { button, x: _, y: _ } => {
@@ -304,28 +279,28 @@ impl Application {
                 }
             }
 
-            for interactable in &self.interactables {
-                if interactable.interation_state().is_hovering {
-                    if let Some(cursor_type) = interactable.interation_state().cursor_on_hover {
-                        if cursor_type == current_cursor_type {
-                            continue;
-                        }
+            // for interactable in &self.interactables {
+            //     if interactable.interation_state().is_hovering {
+            //         if let Some(cursor_type) = interactable.interation_state().cursor_on_hover {
+            //             if cursor_type == current_cursor_type {
+            //                 continue;
+            //             }
 
-                        current_cursor_type = cursor_type;
-                        self.cursor = Cursor::from_system(cursor_type).unwrap();
-                        unsafe {
-                            self.window.set_mouse_cursor(&self.cursor);
-                        }
+            //             current_cursor_type = cursor_type;
+            //             self.cursor = Cursor::from_system(cursor_type).unwrap();
+            //             unsafe {
+            //                 self.window.set_mouse_cursor(&self.cursor);
+            //             }
 
-                        break;
-                    }
-                }
-            }
+            //             break;
+            //         }
+            //     }
+            // }
             
             if self.is_draw_invalidated.swap(false, Ordering::Relaxed) {
-                let (new_texture, new_interactables) = draw_document(&self.archive_path);
+                let (new_texture, document) = draw_document(&self.archive_path);
                 texture = new_texture;
-                self.interactables = new_interactables;
+                self.document = Some(document);
             }
             
             self.window.clear(Color::BLACK);

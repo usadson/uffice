@@ -2,12 +2,13 @@
 // All Rights Reserved.
 
 use roxmltree as xml;
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc, cell::RefCell};
 
 use crate::{
     error::Error,
 };
 
+#[derive(Debug)]
 pub enum RelationshipType {
     Unknown,
 
@@ -57,13 +58,15 @@ impl RelationshipType {
     }
 }
 
+#[derive(Debug)]
 pub struct Relationship {
+    pub id: Rc<str>,
     pub relation_type: RelationshipType,
     pub target: String,
 }
 
 pub struct Relationships {
-    relationships: HashMap<String, Relationship>
+    relationships: HashMap<Rc<str>, Rc<RefCell<Relationship>>>
 }
 
 impl Relationships {
@@ -91,10 +94,13 @@ impl Relationships {
             let relation_type = relationship_xml.attribute("Type");
             let relation_type = RelationshipType::convert(relation_type.unwrap());
 
-            relationships.insert(String::from(relationship_xml.attribute("Id").unwrap()), Relationship{
+            let id: Rc<str> = relationship_xml.attribute("Id").unwrap().into();
+
+            relationships.insert(id.clone(), Rc::new(RefCell::new(Relationship{
+                id: id.clone(),
                 relation_type: relation_type.unwrap(),
                 target: String::from(relationship_xml.attribute("Target").unwrap()),
-            });
+            })));
         }
 
         Ok(Self { 
@@ -106,7 +112,7 @@ impl Relationships {
         self.relationships.len()
     }
 
-    pub fn find(&self, name: &str) -> Option<&Relationship> {
+    pub fn find(&self, name: &str) -> Option<&Rc<RefCell<Relationship>>> {
         self.relationships.get(name)
     }
 }

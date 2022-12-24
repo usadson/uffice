@@ -3,7 +3,7 @@
 
 use font_kit::family_name::FamilyName;
 use roxmltree as xml;
-use sfml::graphics::{Color, TextStyle, Font, Text};
+use sfml::{graphics::{Color, TextStyle, Font, Text}, system::Vector2f};
 
 use crate::{word_processing::HALF_POINT, color_parser, WORD_PROCESSING_XML_NAMESPACE, style::StyleManager};
 
@@ -40,6 +40,16 @@ pub struct Rect {
 }
 
 impl Rect {
+    pub fn new(position: Vector2f, size: Vector2f) -> Self {
+        Self {
+            left: position.x as u32,
+            right: (position.x + size.x) as u32,
+
+            top: position.y as u32,
+            bottom: (position.y + size.y) as u32,
+        }
+    }
+
     pub fn empty() -> Self {
         Rect { left: 0, right: 0, top: 0, bottom: 0 }
     }
