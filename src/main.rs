@@ -7,6 +7,7 @@ mod error;
 mod fonts;
 mod interactable;
 mod relationships;
+mod structured_document_tag;
 mod style;
 mod text_settings;
 mod word_processing;
