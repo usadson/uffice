@@ -25,7 +25,6 @@ use crate::{
     }, 
     error::Error,
     relationships::Relationships,
-    structured_document_tag::StructuredDocumentTag,
     wp::{
         Document, Node, painter::Painter
     }
@@ -195,7 +194,7 @@ fn process_body_element(context: &mut Context,
         println!("├─ {}", child.tag_name().name());
         match child.tag_name().name() {
             "p" => position = process_pragraph_element(context, parent, &child, position, text_settings),
-            "sdt" => position = process_structured_document_tag(context, &child, position, text_settings),
+            "sdt" => position = process_structured_document_tag(context, parent, &child, position),
             _ => ()
         }
     }
@@ -400,61 +399,51 @@ fn process_paragraph_properties_element(context: &Context, paragraph: &mut wp::N
 
 /// Process the <w:docPartObj> element
 /// This element in a child of the <w:sdtPr> elemennt
-fn process_sdt_built_in_doc_part(context: &mut Context,
-                                 node: &xml::Node,
-                                 structured_document_tag: &mut StructuredDocumentTag) {
+fn process_sdt_built_in_doc_part(context: &mut Context, parent: &mut Node, node: &xml::Node) {
+
     for child in node.children() {
         println!("│  │  │  ├─ {}", child.tag_name().name());
 
         match child.tag_name().name() {
-            "docPartGallery" => process_sdt_document_part_gallery_filter(context, &child, structured_document_tag),
+            "docPartGallery" => process_sdt_document_part_gallery_filter(context, parent, &child),
             _ => ()
         }
     }
 }
 
-fn process_sdt_document_part_gallery_filter(context: &mut Context,
-                                            node: &xml::Node,
-                                            structured_document_tag: &mut StructuredDocumentTag) {
+fn process_sdt_document_part_gallery_filter(context: &mut Context, parent: &mut Node, node: &xml::Node) {
     for attr in node.attributes() {
         println!("│  │  │  │  ├─ Attribute \"{}\" => \"{}\"   in namespace \"{}\"", attr.name(), attr.value(), attr.namespace().unwrap_or(""));
     }
 }
 
 /// Process the <w:sdtPr> element
-fn process_std_properties(context: &mut Context,
-                          node: &xml::Node,
-                          structured_document_tag: &mut StructuredDocumentTag) {
+fn process_std_properties(context: &mut Context, parent: &mut Node, node: &xml::Node) {
     for child in node.children() {
         println!("│  │  ├─ {}", child.tag_name().name());
 
         match child.tag_name().name() {
-            "docPartObj" => process_sdt_built_in_doc_part(context, &child, structured_document_tag),
+            "docPartObj" => process_sdt_built_in_doc_part(context, parent, &child),
             _ => ()
         }
     }
 }
 
 /// Process the <w:sdtEndPr> element
-fn process_sdt_end_character_properties(context: &mut Context,
-                                                            node: &xml::Node,
-                                                            structured_document_tag: &mut StructuredDocumentTag) {
+fn process_sdt_end_character_properties(context: &mut Context, parent: &mut Node, node: &xml::Node) {
     for child in node.children() {
         println!("│  │  ├─ {}", child.tag_name().name());
     }
 }
 
 /// Process the <w:sdtContent> element
-fn process_sdt_content(context: &mut Context,
-                                           node: &xml::Node, 
-                                           original_position: Vector2f, 
-                                           structured_document_tag: &StructuredDocumentTag) -> Vector2f {
+fn process_sdt_content(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Vector2f) -> Vector2f {
     let mut position = original_position;
 
     for child in node.children() {
         println!("│  │  ├─ {}", child.tag_name().name());
         match child.tag_name().name() {
-            //"p" => position = process_pragraph_element(context, &child, position, &structured_document_tag.text_settings),
+            "p" => position = process_pragraph_element(context, parent, &child, position, &parent.text_settings.clone()),
             _ => ()
         }
     }
@@ -465,22 +454,28 @@ fn process_sdt_content(context: &mut Context,
 /// Process the <w:sdt> element
 /// 17.5.2 Structured Document Tags
 fn process_structured_document_tag(context: &mut Context,
+                                   parent: &mut Node,
                                    node: &xml::Node, 
-                                   original_position: Vector2f, 
-                                   text_settings: &crate::text_settings::TextSettings) -> Vector2f {
+                                   original_position: Vector2f) -> Vector2f {
     let mut position = original_position;
 
-    let mut structured_document_tag = StructuredDocumentTag{
-        text_settings: text_settings.clone()
-    };
+    let sdt = parent.append_child(wp::Node{
+        data: wp::NodeData::StructuredDocumentTag(Default::default()),
+        page: context.current_page,
+        position,
+        text_settings: parent.text_settings.clone(),
+        size: Vector2f::new(0.0, 0.0),
+        children: Some(vec![]),
+        interaction_states: Default::default(),
+    });
 
     for child in node.children() {
         println!("│  ├─ {}", child.tag_name().name());
 
         match child.tag_name().name() {
-            "sdtContent" => position = process_sdt_content(context,&child, original_position, &structured_document_tag),
-            "sdtEndPr" => process_sdt_end_character_properties(context, &child, &mut structured_document_tag),
-            "sdtPr" => process_std_properties(context, &child, &mut structured_document_tag),
+            "sdtContent" => position = process_sdt_content(context, sdt, &child, original_position),
+            "sdtEndPr" => process_sdt_end_character_properties(context, sdt, &child),
+            "sdtPr" => process_std_properties(context, sdt, &child),
             _ => panic!("Illegal <w:sdt> child named: \"{}\" in namespace \"{}\"", child.tag_name().name(), child.tag_name().namespace().unwrap_or(""))
         }
     }
@@ -495,7 +490,7 @@ fn process_text_element(context: &mut Context,
                         position: Vector2f) -> Vector2f {
     let mut position = position;
 
-    let mut text_node = parent.append_child(wp::Node {
+    let text_node = parent.append_child(wp::Node {
         data: wp::NodeData::Text(),
         page: context.current_page,
         position,
@@ -643,7 +638,7 @@ fn process_text_run_element(context: &mut Context,
                             position: Vector2f) -> Vector2f {
     let mut position = position;
 
-    let mut text_run = parent.append_child(wp::Node{
+    let text_run = parent.append_child(wp::Node{
         data: wp::NodeData::TextRun(),
 
         page: context.current_page,

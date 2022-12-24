@@ -25,6 +25,7 @@ pub enum NodeData {
     Document(Document),
     Hyperlink(Hyperlink),
     Paragraph(Paragraph),
+    StructuredDocumentTag(StructuredDocumentTag),
     Text(),
     TextPart(TextPart),
     TextRun(),
@@ -249,6 +250,19 @@ impl Default for Hyperlink {
     fn default() -> Self {
         Self {
             relationship: None
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct StructuredDocumentTag {
+
+}
+
+impl Default for StructuredDocumentTag {
+    fn default() -> Self {
+        Self {
+            
         }
     }
 }
