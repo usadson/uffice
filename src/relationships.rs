@@ -86,9 +86,12 @@ impl Relationships {
                 continue;
             }
             
-            println!("Relationship");
-            for attr in relationship_xml.attributes() {
-                println!("- Attribute \"{}\"  =>  \"{}\"      ns={}", attr.name(), attr.value(), attr.namespace().unwrap_or(""));
+            #[cfg(feature = "debug-relationships")]
+            {
+               println!("Relationship");
+                for attr in relationship_xml.attributes() {
+                    println!("- Attribute \"{}\"  =>  \"{}\"      ns={}", attr.name(), attr.value(), attr.namespace().unwrap_or(""));
+                }
             }
 
             let relation_type = relationship_xml.attribute("Type");

@@ -566,7 +566,9 @@ fn process_text_element_text(context: &mut Context, parent: &mut Node, text: &mu
 
         let stop_reason;
 
+        #[cfg(feature = "debug-text-layout")]
         println!("width({}) < max_width_fitting_on_page({}) \"{}\"", width, max_width_fitting_on_page, line);
+
         if let Some((next_index, next_word)) = iter.peek() {
             let line_with_next = &text_string[start..(next_index + next_word.bytes().count())];
             text.set_string(line_with_next);
@@ -596,8 +598,11 @@ fn process_text_element_text(context: &mut Context, parent: &mut Node, text: &mu
         
         previous_word_pair = None;
 
-        println!("│  │  │  │  ├─ Line: \"{}\", stop_reason={:?}", line, stop_reason);
-        println!("│  │  │  │  ├─ Calculation: x={} w={} m={}", position.x, width, max_width_fitting_on_page);
+        #[cfg(feature = "debug-text-layout")]
+        {
+            println!("│  │  │  │  ├─ Line: \"{}\", stop_reason={:?}", line, stop_reason);
+            println!("│  │  │  │  ├─ Calculation: x={} w={} m={}", position.x, width, max_width_fitting_on_page);
+        }
 
         let text_part = parent.append_child(wp::Node {
             data: wp::NodeData::TextPart(wp::TextPart{

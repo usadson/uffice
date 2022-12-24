@@ -88,7 +88,9 @@ pub struct StyleManager {
 
 fn process_xml_doc_defaults(element: &xml::Node, manager: &mut StyleManager) {
     for child in element.children() {
+        #[cfg(feature = "debug-styles")]
         println!("Style⟫ │  ├─ {}", child.tag_name().name());
+
         match child.tag_name().name() {
             "rPrDefault" => {
                 process_xml_rpr_default(&child, manager);
@@ -100,7 +102,9 @@ fn process_xml_doc_defaults(element: &xml::Node, manager: &mut StyleManager) {
 
 fn process_xml_rpr_default(element: &xml::Node, manager: &mut StyleManager) {
     for child in element.children() {
+        #[cfg(feature = "debug-styles")]
         println!("Style⟫ │  │  ├─ {}", child.tag_name().name());
+
         match child.tag_name().name() {
             "rPr" => {
                 let mut settings = manager.default_text_settings.clone();
@@ -124,10 +128,13 @@ impl StyleManager {
         assert_eq!(document.root_element().tag_name().name(), "styles");
         assert!(is_correct_namespace(&document.root_element()));
 
+        #[cfg(feature = "debug-styles")]
         println!("Style⟫ {}", document.root_element().tag_name().name());
 
         for element in document.root_element().children() {
+            #[cfg(feature = "debug-styles")]
             println!("Style⟫ ├─ {}", element.tag_name().name());
+
             if !is_correct_namespace(&element) {
                 continue;
             }
