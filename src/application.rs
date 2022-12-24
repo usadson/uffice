@@ -23,6 +23,7 @@ use crate::text_settings::Position;
 use crate::word_processing;
 use crate::word_processing::DocumentResult;
 use crate::wp;
+use crate::wp::MouseEvent;
 
 pub const SCROLL_BAR_WIDTH: f32 = 20.0;
 
@@ -182,24 +183,21 @@ impl Application {
         }
     }
 
-    pub fn check_interactable_for_mouse(&mut self, mouse_position: Vector2f) {
+    pub fn check_interactable_for_mouse(&mut self, mouse_position: Vector2f, callback: &mut dyn FnMut(&mut wp::Node, Position)) {
         if !self.document_rect.contains(mouse_position) {
             return;
         }
 
-        println!("[ClickEvent]     Inside document rect!");
         let mouse_position = Position::new(
             ((mouse_position.x - self.document_rect.left) / self.scale) as u32, 
             ((mouse_position.y - self.document_rect.top) / self.scale) as u32
         );
 
-        println!("[ClickEvent]       Scaled Mouse Position = {} x {}", mouse_position.x, mouse_position.y);
-
         let doc = self.document.as_ref().unwrap();
         let mut document = doc.borrow_mut();
 
-        document.hit_test(mouse_position, &|node| {
-            node.on_event(&mut wp::Event::Click(mouse_position));
+        document.hit_test(mouse_position, &mut |node| {
+            callback(node, mouse_position);
         });
     }
 
@@ -208,9 +206,11 @@ impl Application {
 
         let mut shape = sfml::graphics::RectangleShape::new();
         let mut left_button_pressed = false;
+        let mut mouse_down = false;
         let mut mouse_position = Vector2f::new(0.0, 0.0);
 
-        // let mut current_cursor_type = CursorType::Arrow;
+        let mut current_cursor_type = CursorType::Arrow;
+        let mut new_cursor = None;
 
         while self.window.is_open() {
             let window_size = self.window.size();
@@ -247,14 +247,20 @@ impl Application {
                                     left_button_pressed = true;
                                 }
 
-                                println!("[ClickEvent]   Document Rect @ {} x {}  w {}  h{}", self.document_rect.left, self.document_rect.top, 
-                                        self.document_rect.width, self.document_rect.height);
-                                self.check_interactable_for_mouse(mouse_position);
+                                if !mouse_down {
+                                    mouse_down = true;
+                                    println!("[ClickEvent]   Document Rect @ {} x {}  w {}  h{}", self.document_rect.left, self.document_rect.top, 
+                                            self.document_rect.width, self.document_rect.height);
+                                    self.check_interactable_for_mouse(mouse_position, &mut |node, mouse_position| {
+                                        node.on_event(&mut wp::Event::Click(MouseEvent::new(mouse_position)));
+                                    });
+                                }
                             }
                         }
                         Event::MouseButtonReleased { button, x: _, y: _ } => {
                             if button == sfml::window::mouse::Button::Left {
                                 left_button_pressed = false;
+                                mouse_down = false;
                             }
                         }
                         Event::MouseMoved { x, y } => {
@@ -263,39 +269,43 @@ impl Application {
                             }
                             
                             mouse_position = Vector2f::new(x as f32, y as f32);
+                            new_cursor = Some(CursorType::Arrow);
 
-                            // for interactable in &mut self.interactables {
-                            //     interactable.interation_state_mut().is_hovering = false;
-                            // }
+                            if let Some(document) = &mut self.document {
+                                document.borrow_mut().apply_recursively(&mut |node| {
+                                    node.interaction_states.hover = wp::HoverState::NotHoveringOn;
+                                });
 
-                            // self.check_interactable_for_mouse(mouse_position, 
-                            //     &|_, interactable| {
-                            //         interactable.interation_state_mut().is_hovering = true;
-                            //     }
-                            // );
+                                self.check_interactable_for_mouse(mouse_position, &mut |node, position| {
+                                    node.interaction_states.hover = wp::HoverState::HoveringOver;
+
+                                    let mut event = wp::Event::Hover(wp::MouseEvent::new(position));
+                                    node.on_event(&mut event);
+
+                                    if let wp::Event::Hover(mouse_event) = &event {
+                                        if let Some(cursor) = mouse_event.new_cursor {
+                                            new_cursor = Some(cursor);
+                                        }
+                                    }
+                                });
+                            }
                         }
                         _ => (),
                     }
                 }
             }
 
-            // for interactable in &self.interactables {
-            //     if interactable.interation_state().is_hovering {
-            //         if let Some(cursor_type) = interactable.interation_state().cursor_on_hover {
-            //             if cursor_type == current_cursor_type {
-            //                 continue;
-            //             }
+            if let Some(cursor) = new_cursor {
+                if cursor != current_cursor_type {
+                    current_cursor_type = cursor;
+                    self.cursor = Cursor::from_system(cursor).unwrap();
+                    unsafe {
+                        self.window.set_mouse_cursor(&self.cursor);
+                    }
+                }
+            }
 
-            //             current_cursor_type = cursor_type;
-            //             self.cursor = Cursor::from_system(cursor_type).unwrap();
-            //             unsafe {
-            //                 self.window.set_mouse_cursor(&self.cursor);
-            //             }
-
-            //             break;
-            //         }
-            //     }
-            // }
+            new_cursor = None;
             
             if self.is_draw_invalidated.swap(false, Ordering::Relaxed) {
                 let (new_texture, document) = draw_document(&self.archive_path);

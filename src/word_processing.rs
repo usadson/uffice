@@ -218,6 +218,7 @@ fn process_hyperlink_element(context: &mut Context,
         text_settings: parent.text_settings.clone(),
         size: Vector2f::new(0.0, 0.0),
         children: Some(vec![]),
+        interaction_states: Default::default(),
     });
 
     for child in node.children() {
@@ -272,6 +273,7 @@ fn process_pragraph_element(context: &mut Context,
         text_settings: text_settings.clone(),
         size: Vector2f::new(0.0, 0.0),
         children: Some(vec![]),
+        interaction_states: Default::default(),
     });
 
     for child in node.children() {
@@ -500,6 +502,7 @@ fn process_text_element(context: &mut Context,
         text_settings: parent.text_settings.clone(),
         size: Vector2f::new(0.0, 0.0),
         children: Some(vec![]),
+        interaction_states: Default::default(),
     });
 
     for child in node.children() {
@@ -610,6 +613,7 @@ fn process_text_element_text(context: &mut Context, parent: &mut Node, text: &mu
             text_settings: parent.text_settings.clone(),
             size: text.global_bounds().size(),
             children: Some(vec![]),
+            interaction_states: Default::default(),
         });
 
         text_part.position = match text_part.text_settings.justify.unwrap_or(TextJustification::Start) {
@@ -647,6 +651,7 @@ fn process_text_run_element(context: &mut Context,
         text_settings: parent.text_settings.clone(),
         size: Vector2f::new(0.0, 0.0),
         children: Some(vec![]),
+        interaction_states: Default::default(),
     });
 
     for text_run_property in node.children() {

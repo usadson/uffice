@@ -8,7 +8,7 @@ use std::{
     cell::RefCell
 };
 
-use sfml::system::Vector2f;
+use sfml::{system::Vector2f, window::CursorType};
 
 use crate::{
     text_settings::{
@@ -31,6 +31,25 @@ pub enum NodeData {
 }
 
 #[derive(Debug)]
+pub enum HoverState {
+    HoveringOver,
+    NotHoveringOn,
+}
+
+#[derive(Debug)]
+pub struct InteractionStates {
+    pub hover: HoverState,
+}
+
+impl Default for InteractionStates {
+    fn default() -> Self {
+        Self {
+            hover: HoverState::NotHoveringOn
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Node {
     
     pub data: NodeData,
@@ -49,6 +68,8 @@ pub struct Node {
     /// Can be None when this element isn't allowed to have children
     pub children: Option<Vec<Node>>,
 
+    pub interaction_states: InteractionStates,
+
 }
 
 impl Node {
@@ -61,6 +82,17 @@ impl Node {
         panic!("Node isn't allowed to have children: {:?}", self.data);
     }
 
+    /// Run the `callback` function recursively on itself and it's descendants.
+    pub fn apply_recursively(&mut self, callback: &dyn Fn(&mut Node)) {
+        callback(self);
+
+        if let Some(children) = &mut self.children {
+            for child in children {
+                callback(child);
+            }
+        }
+    }
+
     pub fn on_event(&mut self, event: &mut Event) {
         if let Some(children) = &mut self.children {
             for child in children {
@@ -69,7 +101,7 @@ impl Node {
         }
 
         match &self.data {
-            NodeData::Hyperlink(hyperlink) => hyperlink.on_event(self, event),
+            NodeData::Hyperlink(hyperlink) => hyperlink.on_event(event),
             NodeData::TextPart(part) => part.on_event(self, event),
             _ => ()
         }
@@ -78,7 +110,7 @@ impl Node {
     /// Returns the hit test result.
     /// 
     /// If Some, the vector contains the innermost to outermost nodes that were in the hit path.
-    pub fn hit_test(&mut self, position: Position, callback: &dyn Fn(&mut Node)) -> bool {
+    pub fn hit_test(&mut self, position: Position, callback: &mut dyn FnMut(&mut Node)) -> bool {
         if let Some(children) = &mut self.children {
             for child in children {
                 if child.hit_test(position, callback) {
@@ -91,7 +123,6 @@ impl Node {
         match self.data {
             NodeData::TextPart(..) => {
                 let rect = Rect::new(self.position, self.size);
-                println!("Hit testing rect {:?}", rect);
                 if rect.is_inside_inclusive(position) {
                     callback(self);
                     return true;
@@ -115,13 +146,29 @@ impl Document {
             text_settings, 
             size: Vector2f::new(0.0, 0.0),
             children: Some(vec![]),
+            interaction_states: Default::default(),
+        }
+    }
+}
+
+pub struct MouseEvent {
+    pub position: Position,
+    pub new_cursor: Option<CursorType>
+}
+
+impl MouseEvent {
+    pub fn new(position: Position) -> MouseEvent {
+        Self {
+            position,
+            new_cursor: None
         }
     }
 }
 
 pub enum Event<'a> {
+    Click(MouseEvent),
+    Hover(MouseEvent),
     Paint(&'a mut Painter<'a>),
-    Click(Position),
 }
 
 #[derive(Debug)]
@@ -154,17 +201,25 @@ pub struct Hyperlink {
 }
 
 impl Hyperlink {
-    pub fn on_event(&self, node: &Node, event: &mut Event) {
-        if let Event::Click(..) = event {
-            if let Some(relationship) = &self.relationship {
-                let url = &relationship.borrow().target;
-                match url::Url::parse(url) {
-                    Err(e) => println!("[Interactable] (Link): \"{}\": {:?}", url, e),
-                    Ok(url) => self.open_browser(&url)
+    pub fn on_event(&self, event: &mut Event) {
+        match event {
+            Event::Click(..) => {
+                if let Some(relationship) = &self.relationship {
+                    let url = &relationship.borrow().target;
+                    match url::Url::parse(url) {
+                        Err(e) => println!("[Interactable] (Link): \"{}\": {:?}", url, e),
+                        Ok(url) => self.open_browser(&url)
+                    }
+                } else {
+                    println!("[WARNING] Clicked on a link but no relationship was bound :(");
                 }
-            } else {
-                println!("[WARNING] Clicked on a link but no relationship was bound :(");
             }
+
+            Event::Hover(mouse_event) => {
+                mouse_event.new_cursor = Some(CursorType::Hand);
+            }
+
+            _ => ()
         }
     }
 
