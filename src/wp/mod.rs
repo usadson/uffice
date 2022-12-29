@@ -1,20 +1,22 @@
 // Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+pub mod layout;
+pub mod numbering;
 pub mod painter;
 
 use std::{
-    rc::Rc, 
-    cell::RefCell
+    rc::{Rc, Weak},
+    cell::RefCell,
 };
 
 use sfml::{system::Vector2f, window::CursorType};
 
 use crate::{
     text_settings::{
-        TextSettings, 
+        TextSettings,
         PageSettings, Position, Rect
-    }, 
+    },
     relationships::Relationship
 };
 
@@ -22,6 +24,7 @@ use self::painter::Painter;
 
 #[derive(Debug)]
 pub enum NodeData {
+    Body(),
     Document(Document),
     Hyperlink(Hyperlink),
     Paragraph(Paragraph),
@@ -52,13 +55,17 @@ impl Default for InteractionStates {
 
 #[derive(Debug)]
 pub struct Node {
-    
+
+    pub parent: Weak<RefCell<Node>>,
+
+    /// Can be None when this element isn't allowed to have children
+    pub children: Option<Vec<Rc<RefCell<Node>>>>,
     pub data: NodeData,
 
     /// The page number this node is starting on.
     /// (from 0)
     pub page: usize,
-    
+
     /// The position this node is starting from.
     pub position: Vector2f,
 
@@ -66,21 +73,23 @@ pub struct Node {
 
     pub size: Vector2f,
 
-    /// Can be None when this element isn't allowed to have children
-    pub children: Option<Vec<Node>>,
-
     pub interaction_states: InteractionStates,
 
 }
 
 impl Node {
-    pub fn append_child(&mut self, node: Node) -> &mut Node {
-        if let Some(children) = &mut self.children {
-            children.push(node);
-            return children.last_mut().unwrap();
+    pub fn new(data: NodeData) -> Self {
+        Self {
+            parent: Weak::new(),
+            children: Some(vec![]),
+
+            data,
+            page: 0,
+            position: Default::default(),
+            text_settings: TextSettings::new(),
+            size: Default::default(),
+            interaction_states: Default::default(),
         }
-        
-        panic!("Node isn't allowed to have children: {:?}", self.data);
     }
 
     /// Run the `callback` function recursively on itself and it's descendants.
@@ -89,7 +98,7 @@ impl Node {
 
         if let Some(children) = &mut self.children {
             for child in children {
-                callback(child);
+                callback(&mut child.borrow_mut());
             }
         }
     }
@@ -97,7 +106,7 @@ impl Node {
     pub fn on_event(&mut self, event: &mut Event) {
         if let Some(children) = &mut self.children {
             for child in children {
-                child.on_event(event);
+                child.borrow_mut().on_event(event);
             }
         }
 
@@ -109,12 +118,12 @@ impl Node {
     }
 
     /// Returns the hit test result.
-    /// 
+    ///
     /// If Some, the vector contains the innermost to outermost nodes that were in the hit path.
     pub fn hit_test(&mut self, position: Position, callback: &mut dyn FnMut(&mut Node)) -> bool {
         if let Some(children) = &mut self.children {
             for child in children {
-                if child.hit_test(position, callback) {
+                if child.borrow_mut().hit_test(position, callback) {
                     callback(self);
                     return true;
                 }
@@ -136,19 +145,51 @@ impl Node {
     }
 }
 
+pub fn append_child<'b>(parent_ref: Rc<RefCell<Node>>, mut node: Node) -> Rc<RefCell<Node>> {
+    let mut parent = parent_ref.borrow_mut();
+    node.parent = Rc::downgrade(&parent_ref);
+    node.text_settings = parent.text_settings.clone();
+    node.page = parent.page;
+    node.position = parent.position;
+
+    if let Some(children) = &mut parent.children {
+        children.push(Rc::new(RefCell::new(node)));
+        return children.last_mut().unwrap().clone();
+    }
+
+    panic!("Node isn't allowed to have children: {:?}", parent.data);
+}
+
+pub fn create_child(parent_ref: Rc<RefCell<Node>>, data: NodeData) -> Rc<RefCell<Node>> {
+    let mut parent = parent_ref.borrow_mut();
+    let node = Node {
+        parent: Rc::downgrade(&parent_ref),
+        children: Some(vec![]),
+        data,
+        page: parent.page,
+        position: parent.position,
+        text_settings: parent.text_settings.clone(),
+        size: Default::default(),
+        interaction_states: Default::default(),
+    };
+
+    if let Some(children) = &mut parent.children {
+        children.push(Rc::new(RefCell::new(node)));
+        return children.last_mut().unwrap().clone();
+    }
+
+    panic!("Node isn't allowed to have children: {:?}", parent.data);
+}
+
 impl Document {
     pub fn new(text_settings: TextSettings, page_settings: PageSettings) -> Node {
-        Node {
-            data: NodeData::Document(Document { 
-                page_settings,
-            }),
-            page: 0, 
-            position: Vector2f::new(0.0, 0.0),
-            text_settings, 
-            size: Vector2f::new(0.0, 0.0),
-            children: Some(vec![]),
-            interaction_states: Default::default(),
-        }
+        let mut node = Node::new(NodeData::Document(Self {
+            page_settings
+        }));
+
+        node.text_settings = text_settings;
+
+        node
     }
 }
 
@@ -177,7 +218,7 @@ pub struct Paragraph;
 
 #[derive(Debug)]
 pub struct Document {
-    pub page_settings: PageSettings
+    pub page_settings: PageSettings,
 }
 
 #[derive(Debug)]
@@ -239,7 +280,7 @@ impl Hyperlink {
     pub fn open_browser(&self, url: &url::Url) {
     }
 
-    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", 
+    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd",
               target_os = "dragonfly", target_os = "netbsd"))]
     pub fn open_browser(&self, url: &url::Url) {
 
@@ -262,7 +303,7 @@ pub struct StructuredDocumentTag {
 impl Default for StructuredDocumentTag {
     fn default() -> Self {
         Self {
-            
+
         }
     }
 }

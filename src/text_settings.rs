@@ -1,6 +1,8 @@
 // Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+use std::{rc::Rc, cell::RefCell};
+
 use font_kit::family_name::FamilyName;
 use roxmltree as xml;
 use sfml::{graphics::{Color, TextStyle, Font, Text}, system::Vector2f};
@@ -93,6 +95,46 @@ pub enum TextJustification {
     End,
 }
 
+#[derive(Debug, Clone)]
+pub struct Numbering {
+    pub definition: Option<Rc<RefCell<crate::wp::numbering::NumberingDefinitionInstance>>>,
+    pub level: Option<i32>,
+}
+impl Numbering {
+    pub fn create_node(&self, paragraph: Rc<RefCell<crate::wp::Node>>) -> Rc<RefCell<crate::wp::Node>> {
+        assert!(paragraph.try_borrow_mut().is_ok());
+        let numbering_definition_instance = &self.definition
+                .as_ref()
+                .unwrap().as_ref().borrow_mut();
+        let abstract_definition = numbering_definition_instance
+                .abstract_numbering_definition
+                .as_ref()
+                .unwrap()
+                .as_ref()
+                .borrow_mut();
+
+        let level = abstract_definition.levels.get(&self.level.unwrap()).unwrap().as_ref().borrow();
+
+        let mut node = crate::wp::Node::new(crate::wp::NodeData::TextPart(crate::wp::TextPart{
+            text: self.formatted(),
+        }));
+
+        node.text_settings = self.combine_text_settings(&paragraph.as_ref().borrow(), &level);
+
+        crate::wp::append_child(paragraph, node)
+    }
+
+    fn combine_text_settings(&self, paragraph: &crate::wp::Node, level: &crate::wp::numbering::NumberingLevelDefinition) -> TextSettings {
+        let mut settings = paragraph.text_settings.clone();
+        settings.inherit_from(&level.text_settings);
+        settings
+    }
+
+    fn formatted(&self) -> String {
+        String::new()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct TextSettings {
     pub bold: Option<bool>,
@@ -105,6 +147,15 @@ pub struct TextSettings {
     pub justify: Option<TextJustification>,
 
     pub highlight_color: Option<Color>,
+    pub numbering: Option<Numbering>,
+
+    /// Specifies the indentation which shall be removed from the first line of
+    /// the parent paragraph, by moving the indentation on the first line back
+    /// towards the beginning of the direction of text flow.
+    pub indentation_hanging: Option<u32>,
+
+    ///
+    pub indentation_left: Option<u32>,
 }
 
 fn inherit_or_original<T: Clone>(inherit: &Option<T>, original: &mut Option<T>) {
@@ -116,7 +167,7 @@ fn inherit_or_original<T: Clone>(inherit: &Option<T>, original: &mut Option<T>) 
 
 impl TextSettings {
     pub fn new() -> Self {
-        Self{ 
+        Self{
             bold: None,
             underline: None,
             font: None,
@@ -125,6 +176,9 @@ impl TextSettings {
             non_complex_text_size: None,
             justify: None,
             highlight_color: None,
+            numbering: None,
+            indentation_hanging: None,
+            indentation_left: None,
         }
     }
 
@@ -137,6 +191,10 @@ impl TextSettings {
         inherit_or_original(&other.non_complex_text_size, &mut self.non_complex_text_size);
         inherit_or_original(&other.justify, &mut self.justify);
         inherit_or_original(&other.highlight_color, &mut self.highlight_color);
+        inherit_or_original(&other.numbering, &mut self.numbering);
+
+        inherit_or_original(&other.indentation_hanging, &mut self.indentation_hanging);
+        inherit_or_original(&other.indentation_left, &mut self.indentation_left);
     }
 
     pub fn load_font(&self, source: &font_kit::sources::multi::MultiSource) -> sfml::SfBox<Font> {
@@ -154,7 +212,7 @@ impl TextSettings {
         let family_names = [FamilyName::Title(String::from(font))];
         let handle = source.select_best_match(&family_names, &properties)
                 .expect("Failed to find font");
-        
+
         match handle {
             font_kit::handle::Handle::Memory { bytes, font_index: _ } => {
                 unsafe {
@@ -176,13 +234,13 @@ impl TextSettings {
         let mut text = Text::new("L", font, character_size);
         text.set_style(self.create_style());
         text.set_fill_color(self.color.unwrap_or(Color::BLACK));
-        
+
         text
     }
 
     pub fn create_style(&self) -> TextStyle {
         let mut style = TextStyle::REGULAR;
-        
+
         if self.bold.unwrap_or(false) {
             style |= TextStyle::BOLD;
         }
@@ -196,13 +254,13 @@ impl TextSettings {
 
     pub fn apply_run_properties_element(&mut self, style_manager: &StyleManager, element: &xml::Node) {
         assert_eq!(element.tag_name().name(), "rPr");
-    
+
         for run_property in element.children() {
             println!("│  │  │  ├─ {}", run_property.tag_name().name());
             for attr in run_property.attributes() {
                 println!("│  │  │  │  ├─ Attribute \"{}\" => \"{}\"", attr.name(), attr.value());
             }
-    
+
             match run_property.tag_name().name() {
                 "b" => {
                     self.bold = match self.bold {
@@ -263,5 +321,5 @@ impl TextSettings {
             }
         }
     }
-    
+
 }

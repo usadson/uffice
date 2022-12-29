@@ -24,6 +24,7 @@ use crate::word_processing;
 use crate::word_processing::DocumentResult;
 use crate::wp;
 use crate::wp::MouseEvent;
+use crate::wp::numbering::NumberingManager;
 
 pub const SCROLL_BAR_WIDTH: f32 = 20.0;
 
@@ -45,7 +46,7 @@ fn draw_document(archive_path: &str) -> DocumentResult {
         let file = archive.by_index(i).unwrap();
         println!("[Document] ZIP: File: {}", file.name());
     }
-    
+
     let document_relationships;
     {
         let txt = load_archive_file_to_string(&mut archive, "word/_rels/document.xml.rels");
@@ -59,13 +60,18 @@ fn draw_document(archive_path: &str) -> DocumentResult {
 
     let styles_document_text = load_archive_file_to_string(&mut archive, "word/styles.xml");
     let styles_document = xml::Document::parse(&styles_document_text)
-            .expect("Failed to parse document");
+            .expect("Failed to parse styles document");
     let style_manager = StyleManager::from_document(&styles_document).unwrap();
-    
+
+    let numbering_document_text = load_archive_file_to_string(&mut archive, "word/numbering.xml");
+    let numbering_document = xml::Document::parse(&numbering_document_text)
+            .expect("Failed to parse numbering document");
+    let numbering_manager = NumberingManager::from_xml(&numbering_document);
+
     let document_text = load_archive_file_to_string(&mut archive, "word/document.xml");
     let document = xml::Document::parse(&document_text)
             .expect("Failed to parse document");
-    word_processing::process_document(&document, &style_manager, &document_relationships)
+    word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager)
 }
 
 struct Scroller {
@@ -79,9 +85,9 @@ struct Scroller {
 
 impl Scroller {
     pub fn new() -> Self {
-        Self { 
-            value: 0.0, 
-            document_height: 0.0, 
+        Self {
+            value: 0.0,
+            document_height: 0.0,
             window_height: 0.0,
             bar_rect: Rect::new(0.0, 0.0, 0.0, 0.0),
             scroll_bar_rect: Rect::new(0.0, 0.0, 0.0, 0.0),
@@ -105,11 +111,11 @@ impl Scroller {
     pub fn draw(&mut self, shape: &mut RectangleShape, parent: &mut RenderWindow) {
         let window_size = parent.size();
         self.window_height = window_size.y as f32;
-        
+
         let full_page_scrolls = self.document_height / window_size.y as f32;
         let scroll_bar_height = (window_size.y as f32 / full_page_scrolls).ceil();
         let scroll_y = (window_size.y as f32 - scroll_bar_height) * self.value;
-        
+
         shape.set_fill_color(Color::rgb(0xBD, 0xBD, 0xBD));
         shape.set_size(Vector2f::new(SCROLL_BAR_WIDTH, window_size.y as f32));
         shape.set_position(Vector2f::new(window_size.x as f32 - SCROLL_BAR_WIDTH, 0.0));
@@ -164,7 +170,7 @@ impl Application {
         watcher.watch(document_file_path, RecursiveMode::NonRecursive).unwrap();
 
         let context_settings = ContextSettings::default();
-        let mut window = RenderWindow::new(VideoMode::new(1280, 720, 32), 
+        let mut window = RenderWindow::new(VideoMode::new(1280, 720, 32),
                 &format!("{} - {}", uffice_lib::constants::vendor::NAME, document_file_path.file_name().unwrap().to_string_lossy()), Style::DEFAULT, &context_settings);
 
         window.set_framerate_limit(30);
@@ -189,7 +195,7 @@ impl Application {
         }
 
         let mouse_position = Position::new(
-            ((mouse_position.x - self.document_rect.left) / self.scale) as u32, 
+            ((mouse_position.x - self.document_rect.left) / self.scale) as u32,
             ((mouse_position.y - self.document_rect.top) / self.scale) as u32
         );
 
@@ -220,7 +226,7 @@ impl Application {
                         Event::Closed => self.window.close(),
                         Event::Resized { width, height } => {
                             //self.is_draw_invalidated.store(true, Ordering::Relaxed);
-                            
+
                             self.window.set_view(View::new(
                                 Vector2f::new(
                                     width as f32 / 2.0,
@@ -249,7 +255,7 @@ impl Application {
 
                                 if !mouse_down {
                                     mouse_down = true;
-                                    println!("[ClickEvent]   Document Rect @ {} x {}  w {}  h{}", self.document_rect.left, self.document_rect.top, 
+                                    println!("[ClickEvent]   Document Rect @ {} x {}  w {}  h{}", self.document_rect.left, self.document_rect.top,
                                             self.document_rect.width, self.document_rect.height);
                                     self.check_interactable_for_mouse(mouse_position, &mut |node, mouse_position| {
                                         node.on_event(&mut wp::Event::Click(MouseEvent::new(mouse_position)));
@@ -267,7 +273,7 @@ impl Application {
                             if left_button_pressed {
                                 self.scroller.apply_mouse_offset(y as f32 - mouse_position.y);
                             }
-                            
+
                             mouse_position = Vector2f::new(x as f32, y as f32);
                             new_cursor = Some(CursorType::Arrow);
 
@@ -306,16 +312,16 @@ impl Application {
             }
 
             new_cursor = None;
-            
+
             if self.is_draw_invalidated.swap(false, Ordering::Relaxed) {
                 let (new_texture, document) = draw_document(&self.archive_path);
                 texture = new_texture;
                 self.document = Some(document);
             }
-            
+
             self.window.clear(Color::BLACK);
             {
-                // I don't know rust well enough to be able to keep a Sprite 
+                // I don't know rust well enough to be able to keep a Sprite
                 // around _and_ replace the texture.
                 //
                 // But since this code is not performance-critical I don't care
@@ -330,7 +336,7 @@ impl Application {
                 self.scale = full_size * factor / page_size;
                 let centered_x = (full_size - page_size * self.scale) / 2.0;
                 sprite.set_scale((self.scale, self.scale));
-            
+
                 sprite.set_position((
                     centered_x,
                     20.0f32 - self.scroller.offset(sprite.texture_rect().height as f32)
@@ -344,7 +350,7 @@ impl Application {
 
             // Scrollbar
             self.scroller.draw(&mut shape, &mut self.window);
-    
+
             self.window.display();
         }
 
