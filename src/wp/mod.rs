@@ -27,6 +27,14 @@ pub enum NodeData {
     Body(),
     Document(Document),
     Hyperlink(Hyperlink),
+
+    /// The numbering parent is an invisible parent which contains a single
+    /// TextPart child.
+    ///
+    /// The reason this TextPart has a parent and isn't just a child of the
+    /// upper Paragraph, is to combine the TextSettings of the NumberingStyle
+    /// and the upperlying Paragraph.
+    NumberingParent,
     Paragraph(Paragraph),
     StructuredDocumentTag(StructuredDocumentTag),
     Text(),

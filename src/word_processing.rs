@@ -251,7 +251,7 @@ fn process_pragraph_element(context: &mut Context,
     position.x = context.page_settings.margins.left as f32 * TWELFTEENTH_POINT;
 
     let paragraph = wp::append_child(parent, wp::Node::new(wp::NodeData::Paragraph(wp::Paragraph)));
-    assert!(paragraph.try_borrow_mut().is_ok());
+    paragraph.borrow_mut().position = position;
 
     if let Some(first_child) = node.first_child() {
         // Paragraph Properties section 17.3.1.26
@@ -266,8 +266,10 @@ fn process_pragraph_element(context: &mut Context,
         let pref = paragraph.as_ref().borrow();
         if let Some(numbering) = pref.text_settings.numbering.clone() {
             drop(pref);
-            let node = numbering.create_node(paragraph.clone());
-            position.x += node.as_ref().borrow().size.x;
+            let node = numbering.create_node(paragraph.clone(), &mut line_layout, &context.font_source);
+            position.x += node.as_ref().borrow().size.x
+             + paragraph.as_ref().borrow().text_settings.indent_one(position.x)
+             ;
         }
     }
 
@@ -535,7 +537,15 @@ fn process_text_element(context: &mut Context,
     position
 }
 
-pub fn process_text_element_text<'a>(parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, text: &mut Text, text_string: &str, original_position: Vector2f) -> Vector2f {
+pub fn append_text_element(text_string: &str, parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, font_source: &font_kit::sources::multi::MultiSource) -> Vector2f {
+    let font = parent.as_ref().borrow().text_settings.load_font(&font_source);
+    let mut text = parent.as_ref().borrow().text_settings.create_text(&font);
+
+    let position = parent.as_ref().borrow().position;
+    process_text_element_text(parent, line_layout, &mut text, text_string, position)
+}
+
+pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, text: &mut Text, text_string: &str, original_position: Vector2f) -> Vector2f {
     #[derive(Debug)]
     enum LineStopReason {
         /// The end of the text was reached. This could also very well mean the

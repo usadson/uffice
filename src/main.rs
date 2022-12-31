@@ -9,6 +9,7 @@ mod relationships;
 mod style;
 mod text_settings;
 mod word_processing;
+mod unicode;
 mod wp;
 
 use sfml::graphics::*;

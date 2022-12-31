@@ -7,7 +7,7 @@ use font_kit::family_name::FamilyName;
 use roxmltree as xml;
 use sfml::{graphics::{Color, TextStyle, Font, Text}, system::Vector2f};
 
-use crate::{word_processing::HALF_POINT, color_parser, WORD_PROCESSING_XML_NAMESPACE, style::StyleManager};
+use crate::{word_processing::{HALF_POINT, TWELFTEENTH_POINT}, color_parser, WORD_PROCESSING_XML_NAMESPACE, style::StyleManager, wp::layout::LineLayout};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Size {
@@ -101,7 +101,8 @@ pub struct Numbering {
     pub level: Option<i32>,
 }
 impl Numbering {
-    pub fn create_node(&self, paragraph: Rc<RefCell<crate::wp::Node>>) -> Rc<RefCell<crate::wp::Node>> {
+    pub fn create_node(&self, paragraph: Rc<RefCell<crate::wp::Node>>, line_layout: &mut LineLayout,
+                       font_source: &font_kit::sources::multi::MultiSource) -> Rc<RefCell<crate::wp::Node>> {
         assert!(paragraph.try_borrow_mut().is_ok());
         let numbering_definition_instance = &self.definition
                 .as_ref()
@@ -113,25 +114,30 @@ impl Numbering {
                 .as_ref()
                 .borrow_mut();
 
-        let level = abstract_definition.levels.get(&self.level.unwrap()).unwrap().as_ref().borrow();
+        let level_idx = self.level.unwrap();
+        let mut level = abstract_definition.levels.get(&level_idx).unwrap().borrow_mut();
+        let numbering_value = level.next_value();
 
-        let mut node = crate::wp::Node::new(crate::wp::NodeData::TextPart(crate::wp::TextPart{
-            text: self.formatted(),
-        }));
+        let mut displayed_text = format!("{}.", level.format(numbering_value));
+        for i in level_idx..0 {
+            let level = abstract_definition.levels.get(&i).unwrap().as_ref().borrow();
+            displayed_text = format!("{}.{}", displayed_text, level.format(level.current_value()));
+        }
 
-        node.text_settings = self.combine_text_settings(&paragraph.as_ref().borrow(), &level);
+        // See the documentation of NodeData::NumberingParent for why we need
+        // this parent and not just inherit from the parent Paragraph.
+        let numbering_parent = crate::wp::create_child(paragraph.clone(), crate::wp::NodeData::NumberingParent);
+        numbering_parent.borrow_mut().text_settings = self.combine_text_settings(&paragraph.as_ref().borrow(), &level);
 
-        crate::wp::append_child(paragraph, node)
+        crate::word_processing::append_text_element(&displayed_text, numbering_parent.clone(), line_layout, font_source);
+        let numbering_parent = numbering_parent.as_ref().borrow();
+        numbering_parent.children.as_ref().unwrap().last().unwrap().clone()
     }
 
     fn combine_text_settings(&self, paragraph: &crate::wp::Node, level: &crate::wp::numbering::NumberingLevelDefinition) -> TextSettings {
         let mut settings = paragraph.text_settings.clone();
         settings.inherit_from(&level.text_settings);
         settings
-    }
-
-    fn formatted(&self) -> String {
-        String::new()
     }
 }
 
@@ -320,6 +326,15 @@ impl TextSettings {
                 _ => ()
             }
         }
+    }
+
+    pub(crate) fn indent_one(&self, x: f32) -> f32 {
+        if let Some(indentation) = self.indentation_left {
+            let indentation = indentation as f32 * TWELFTEENTH_POINT;
+            return ((x / indentation) + 1.0) * indentation;
+        }
+
+        x
     }
 
 }

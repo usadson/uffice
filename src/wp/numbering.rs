@@ -9,7 +9,7 @@ use std::{
 
 use roxmltree as xml;
 
-use crate::{WORD_PROCESSING_XML_NAMESPACE, text_settings::TextSettings};
+use crate::{WORD_PROCESSING_XML_NAMESPACE, text_settings::TextSettings, unicode::alphabet::Alphabet};
 
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
@@ -27,6 +27,24 @@ pub enum NumberingFormat {
     ChineseLegalSimplified,
     Chosung,
     Custom(String),
+
+    /// Specifies that the sequence shall consist of decimal numbering.
+    ///
+    /// To determine the text that is displayed for any value, this sequence
+    /// specifies a set of characters that represent positions 1–9 and then
+    /// those same characters are combined with each other and 0 (represents the
+    /// number zero) to construct the remaining values.
+    ///
+    /// The set of characters used by this numbering format for values 0–9 is
+    /// U+0030–U+0039, respectively.
+    ///
+    /// Continue the sequence by using the following steps:
+    ///     1.  Increment the rightmost position.
+    ///     2.  Every time the end of the set is reached, for a given position,
+    ///         increment the position to the immediate left (if there is no
+    ///         position to the immediate left, create a new position and start
+    ///         the sequence of the new position at 1) and reset the current
+    ///         position to 0.
     Decimal,
     DecimalEnclosedCircle,
     DecimalEnclosedCircleChinese,
@@ -60,7 +78,31 @@ pub enum NumberingFormat {
     KoreanDigital2,
     KoreanLegal,
     LowerLetter,
+
+    /// Specifies that the sequence shall consist of lowercase roman numerals.
+    ///
+    /// This system uses a set of characters to represent the numbers 1, 5, 10,
+    /// 50, 100, 500, and 1000 and then those are combined with each other to
+    /// construct the remaining values.
+    ///
+    /// The set of characters used by this numbering format is U+0069, U+0076,
+    /// U+0078, U+006C, U+0063, U+0064, U+006D, respectively.
+    ///
+    /// To construct a number that is outside the set, you work from largest
+    /// groups to smallest following these steps:
+    /// 1.  Create as many groups as possible that contain one thousand in each
+    ///     group.
+    ///     *   The symbol representing one thousand (the power of ten
+    ///         represented by that position): m is repeated for the number of
+    ///         groups formed.
+    ///         If no groups are formed, do not write any symbol.
+    /// 2.  Repeat this for groups of nine hundred (cm), five-hundred (d),
+    ///     four-hundred (cd), one-hundred (c), ninety (xc), fifty (l), forty
+    ///     (xl), ten (x), nine (ix), five (v), four (iv) and finally one (i)
+    ///     using the corresponding symbol to indicate the groups (so
+    ///     four-hundred fifty would be cdl and forty-five would be xlv).
     LowerRoman,
+
     None,
     NumberInDash,
     Ordinal,
@@ -73,6 +115,32 @@ pub enum NumberingFormat {
     ThaiCounting,
     ThaiLetters,
     ThaiNumbers,
+
+    /// Specifies that the sequence shall consist of one or more occurrences of
+    /// a single letter of the Latin alphabet in upper case, from the set listed
+    /// below.
+    ///
+    /// This system uses a set of characters to represent the numbers 1 to the
+    /// length of the language of the alphabet and then those same characters
+    /// are combined to construct the remaining values.
+    ///
+    /// The characters used by this numbering format is determined by using the
+    /// language of the lang element (§17.3.2.20). Specifically:
+    /// *   When the script in use is derived from the Latin alphabet (A–Z),
+    ///     that alphabet is used.
+    ///     [Example: For Norwegian (Nyorsk), the following Unicode characters
+    ///     are used by this numbering format: U+0041–U+005A, U+00C6, U+00D8,
+    ///     U+00C5. end example]
+    /// *   When the language in use is based on any other system, the
+    ///     characters U+0041–U+005A are used.
+    ///
+    /// For values greater than the size of the set, the number is constructed
+    /// by following these steps:
+    /// 1.  Repeatedly subtract the size of the set from the value until the
+    ///     result is equal to or less than the size of the set.
+    /// 2.  The result value determines which character to use, and the same
+    ///     character is written once and then repeated for each time the size
+    ///     of the set was subtracted from the original value.
     UpperLetter,
     UpperRoman,
     VietnameseCounting,
@@ -237,13 +305,67 @@ impl NumberingLevelDefinition {
         definition
     }
 
+    pub fn format(&self, value: i32) -> String {
+        match self.format {
+            NumberingFormat::Decimal => format!("{}", value),
+            NumberingFormat::LowerRoman => {
+                // TODO actually follow algorithm ^_^
+                match value {
+                    1 => 'i'.to_string(),
+                    2 => String::from("ii"),
+                    3 => String::from("iii"),
+                    4 => String::from("iv"),
+                    5 => 'v'.to_string(),
+                    6 => String::from("vi"),
+                    7 => String::from("vii"),
+                    8 => String::from("viii"),
+                    9 => String::from("ix"),
+                    10 => 'x'.to_string(),
+                    _ => panic!("TODO support higher values")
+                }
+            }
+            NumberingFormat::None => String::new(),
+            NumberingFormat::UpperLetter => {
+                // TODO use the alphabet corresponding to the <w:lang>
+                // TODO jump from Z to AA, AB,... and AZ to BA, etc.
+                assert!(value > 0);
+                assert!(value <= 26, "TODO support higher values");
+                crate::unicode::alphabet::Latin::nth(value as usize - 1).to_string()
+            }
+            _ => {
+                println!("[Numbering] Unsupported numbering format: {:?}", self.format);
+                String::from("UNSUPPORTED FORMAT")
+            }
+        }
+    }
+
+    pub fn current_value(&self) -> i32 {
+        self.current_value.unwrap_or(self.starting_value)
+    }
+
+    pub fn next_value(&mut self) -> i32 {
+        match self.current_value {
+            Some(value) => {
+                self.current_value = Some(value + 1);
+                value + 1
+            }
+            None => {
+                self.current_value = Some(self.starting_value);
+                self.starting_value
+            }
+        }
+    }
+
     fn parse_number_level_associated_paragraph_properties(&mut self, node: &xml::Node) {
         for child in node.children() {
             match child.tag_name().name() {
                 "ind" => {
+                    // The w:left is a MSOFFICE quirk I believe, it isn't part
+                    // of the ECMA/ISO standard.
                     if let Some(value) = child.attribute((WORD_PROCESSING_XML_NAMESPACE, "left")) {
                         self.text_settings.indentation_left = Some(value.parse().unwrap());
                     }
+
                     if let Some(value) = child.attribute((WORD_PROCESSING_XML_NAMESPACE, "hanging")) {
                         self.text_settings.indentation_hanging = Some(value.parse().unwrap());
                     }
