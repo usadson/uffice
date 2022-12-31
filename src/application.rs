@@ -17,6 +17,8 @@ use sfml::window::*;
 
 use notify::{Watcher, RecursiveMode};
 
+use uffice_lib::{profile_expr, profiling::{Profiler}};
+
 use crate::relationships::Relationships;
 use crate::style::StyleManager;
 use crate::text_settings::Position;
@@ -36,11 +38,13 @@ fn load_archive_file_to_string(archive: &mut zip::ZipArchive<std::fs::File>, nam
 
 // A4: 210 × 297
 fn draw_document(archive_path: &str) -> DocumentResult {
-    let archive_file = std::fs::File::open(archive_path)
-            .expect("Failed to open specified file");
+    let mut profiler = Profiler::new(String::from("Document Rendering"));
 
-    let mut archive = zip::ZipArchive::new(archive_file)
-            .expect("Failed to read ZIP archive");
+    let archive_file = profile_expr!(profiler, "Open Archive", std::fs::File::open(archive_path)
+            .expect("Failed to open specified file"));
+
+    let mut archive = profile_expr!(profiler, "Read Archive", zip::ZipArchive::new(archive_file)
+            .expect("Failed to read ZIP archive"));
 
     for i in 0..archive.len() {
         let file = archive.by_index(i).unwrap();
@@ -49,6 +53,8 @@ fn draw_document(archive_path: &str) -> DocumentResult {
 
     let document_relationships;
     {
+        let _frame = profiler.frame(String::from("Document Relationships"));
+
         let txt = load_archive_file_to_string(&mut archive, "word/_rels/document.xml.rels");
         if let Ok(document) = xml::Document::parse(&txt) {
             document_relationships = Relationships::load_xml(&document).unwrap();
@@ -58,16 +64,25 @@ fn draw_document(archive_path: &str) -> DocumentResult {
         }
     }
 
-    let styles_document_text = load_archive_file_to_string(&mut archive, "word/styles.xml");
-    let styles_document = xml::Document::parse(&styles_document_text)
-            .expect("Failed to parse styles document");
-    let style_manager = StyleManager::from_document(&styles_document).unwrap();
+    let style_manager = {
+        let _frame = profiler.frame(String::from("Style Definitions"));
 
-    let numbering_document_text = load_archive_file_to_string(&mut archive, "word/numbering.xml");
-    let numbering_document = xml::Document::parse(&numbering_document_text)
-            .expect("Failed to parse numbering document");
-    let numbering_manager = NumberingManager::from_xml(&numbering_document);
+        let styles_document_text = load_archive_file_to_string(&mut archive, "word/styles.xml");
+        let styles_document = xml::Document::parse(&styles_document_text)
+                .expect("Failed to parse styles document");
+            StyleManager::from_document(&styles_document).unwrap()
+    };
 
+    let numbering_manager = {
+        let _frame = profiler.frame(String::from("Numbering Definitions"));
+
+        let numbering_document_text = load_archive_file_to_string(&mut archive, "word/numbering.xml");
+        let numbering_document = xml::Document::parse(&numbering_document_text)
+                .expect("Failed to parse numbering document");
+            NumberingManager::from_xml(&numbering_document)
+    };
+
+    let _frame = profiler.frame(String::from("Document"));
     let document_text = load_archive_file_to_string(&mut archive, "word/document.xml");
     let document = xml::Document::parse(&document_text)
             .expect("Failed to parse document");

@@ -3,3 +3,4 @@
 
 pub mod constants;
 pub mod namespaces;
+pub mod profiling;
