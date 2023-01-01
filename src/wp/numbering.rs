@@ -396,6 +396,15 @@ pub struct NumberingManager {
 }
 
 impl NumberingManager {
+    pub fn new() -> Self {
+        Self {
+            abstract_numbering_definitions: HashMap::new(),
+            numbering_definition_instances: HashMap::new(),
+
+            values: Vec::new(),
+        }
+    }
+
     pub fn from_xml(doc: &xml::Document) -> Self {
         let mut manager = Self {
             abstract_numbering_definitions: HashMap::new(),

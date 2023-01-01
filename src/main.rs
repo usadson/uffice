@@ -3,6 +3,7 @@
 
 mod application;
 mod color_parser;
+mod drawing_ml;
 mod error;
 mod fonts;
 mod relationships;

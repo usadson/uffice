@@ -30,10 +30,13 @@ use crate::wp::numbering::NumberingManager;
 
 pub const SCROLL_BAR_WIDTH: f32 = 20.0;
 
-fn load_archive_file_to_string(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Rc<String> {
-    let zip_document = archive.by_name(name).expect("Not a DOCX file");
-    Rc::new(std::io::read_to_string(zip_document)
-            .expect("Failed to read"))
+fn load_archive_file_to_string(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Option<Rc<String>> {
+    if let Ok(zip_document) = archive.by_name(name) {
+        Some(Rc::new(std::io::read_to_string(zip_document)
+                .expect("Failed to read")))
+    } else {
+        None
+    }
 }
 
 // A4: 210 × 297
@@ -55,7 +58,8 @@ fn draw_document(archive_path: &str) -> DocumentResult {
     {
         let _frame = profiler.frame(String::from("Document Relationships"));
 
-        let txt = load_archive_file_to_string(&mut archive, "word/_rels/document.xml.rels");
+        let txt = load_archive_file_to_string(&mut archive, "word/_rels/document.xml.rels")
+                .expect("Document.xml.rels missing, assuming this is not a DOCX file.");
         if let Ok(document) = xml::Document::parse(&txt) {
             document_relationships = Relationships::load_xml(&document).unwrap();
         } else {
@@ -67,7 +71,8 @@ fn draw_document(archive_path: &str) -> DocumentResult {
     let style_manager = {
         let _frame = profiler.frame(String::from("Style Definitions"));
 
-        let styles_document_text = load_archive_file_to_string(&mut archive, "word/styles.xml");
+        let styles_document_text = load_archive_file_to_string(&mut archive, "word/styles.xml")
+                .expect("Style definitions missing, assuming this is not a DOCX file.");
         let styles_document = xml::Document::parse(&styles_document_text)
                 .expect("Failed to parse styles document");
             StyleManager::from_document(&styles_document).unwrap()
@@ -76,14 +81,18 @@ fn draw_document(archive_path: &str) -> DocumentResult {
     let numbering_manager = {
         let _frame = profiler.frame(String::from("Numbering Definitions"));
 
-        let numbering_document_text = load_archive_file_to_string(&mut archive, "word/numbering.xml");
-        let numbering_document = xml::Document::parse(&numbering_document_text)
+        if let Some(numbering_document_text) = load_archive_file_to_string(&mut archive, "word/numbering.xml") {
+            let numbering_document = xml::Document::parse(&numbering_document_text)
                 .expect("Failed to parse numbering document");
             NumberingManager::from_xml(&numbering_document)
+        } else {
+            NumberingManager::new()
+        }
     };
 
     let _frame = profiler.frame(String::from("Document"));
-    let document_text = load_archive_file_to_string(&mut archive, "word/document.xml");
+    let document_text = load_archive_file_to_string(&mut archive, "word/document.xml")
+            .expect("Archive missing word/document.xml: this file is not a WordprocessingML document!");
     let document = xml::Document::parse(&document_text)
             .expect("Failed to parse document");
     word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager)

@@ -26,6 +26,7 @@ use self::painter::Painter;
 pub enum NodeData {
     Body(),
     Document(Document),
+    Drawing(),
     Hyperlink(Hyperlink),
 
     /// The numbering parent is an invisible parent which contains a single

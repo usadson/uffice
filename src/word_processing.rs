@@ -177,6 +177,23 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
     (render_texture, doc.clone())
 }
 
+fn process_drawing_element(context: &mut Context, parent: Rc<RefCell<Node>>,
+                           node: &xml::Node, position: Vector2f) -> Vector2f {
+    let drawing = wp::create_child(parent.clone(), wp::NodeData::Drawing());
+
+    for child in node.children() {
+        match child.tag_name().name() {
+            "inline" => {
+
+            }
+
+            _ => ()
+        }
+    }
+
+    position
+}
+
 fn process_body_element(context: &mut Context,
                         parent: Rc<RefCell<Node>>,
                         node: &xml::Node,
@@ -673,12 +690,20 @@ fn process_text_run_element(context: &mut Context,
             println!("│  │  │  ├─ Attribute \"{}\" → \"{}\"", attr.name(), attr.value());
         }
 
-        if text_run_property.tag_name().name() == "rPr" {
-            text_run.borrow_mut().text_settings.apply_run_properties_element(context.style_manager, &text_run_property);
-        }
+        match text_run_property.tag_name().name() {
+            "drawing" => {
+                position = process_drawing_element(context, text_run.clone(), &text_run_property, position);
+            }
 
-        if text_run_property.tag_name().name() == "t" {
-            position = process_text_element(context, text_run.clone(), line_layout, &text_run_property, position);
+            "rPr" =>  {
+                text_run.borrow_mut().text_settings.apply_run_properties_element(context.style_manager, &text_run_property);
+            }
+
+            "t" => {
+                position = process_text_element(context, text_run.clone(), line_layout, &text_run_property, position);
+            }
+
+            _ => ()
         }
     }
 
