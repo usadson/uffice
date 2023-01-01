@@ -1,4 +1,4 @@
-// Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
+// Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
 use std::cell::RefCell;
@@ -68,16 +68,6 @@ fn draw_document(archive_path: &str) -> DocumentResult {
         }
     }
 
-    let style_manager = {
-        let _frame = profiler.frame(String::from("Style Definitions"));
-
-        let styles_document_text = load_archive_file_to_string(&mut archive, "word/styles.xml")
-                .expect("Style definitions missing, assuming this is not a DOCX file.");
-        let styles_document = xml::Document::parse(&styles_document_text)
-                .expect("Failed to parse styles document");
-            StyleManager::from_document(&styles_document).unwrap()
-    };
-
     let numbering_manager = {
         let _frame = profiler.frame(String::from("Numbering Definitions"));
 
@@ -88,6 +78,16 @@ fn draw_document(archive_path: &str) -> DocumentResult {
         } else {
             NumberingManager::new()
         }
+    };
+
+    let style_manager = {
+        let _frame = profiler.frame(String::from("Style Definitions"));
+
+        let styles_document_text = load_archive_file_to_string(&mut archive, "word/styles.xml")
+                .expect("Style definitions missing, assuming this is not a DOCX file.");
+        let styles_document = xml::Document::parse(&styles_document_text)
+                .expect("Failed to parse styles document");
+        StyleManager::from_document(&styles_document, &numbering_manager).unwrap()
     };
 
     let _frame = profiler.frame(String::from("Document"));

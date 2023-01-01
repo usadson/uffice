@@ -1,4 +1,4 @@
-// Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
+// Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
 pub mod layout;
@@ -24,7 +24,6 @@ use self::painter::Painter;
 
 #[derive(Debug)]
 pub enum NodeData {
-    Body(),
     Document(Document),
     Drawing(),
     Hyperlink(Hyperlink),

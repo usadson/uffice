@@ -1,7 +1,7 @@
-// Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
+// Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::{rc::Rc, cell::RefCell};
+use std::{rc::Rc, cell::RefCell, any::type_name};
 
 use font_kit::family_name::FamilyName;
 use roxmltree as xml;
@@ -164,10 +164,12 @@ pub struct TextSettings {
     pub indentation_left: Option<u32>,
 }
 
-fn inherit_or_original<T: Clone>(inherit: &Option<T>, original: &mut Option<T>) {
-    match inherit {
-        Some(value) => *original = Some((*value).clone()),
-        None => ()
+fn inherit_or_original<T: Clone + std::fmt::Debug>(inherit: &Option<T>, original: &mut Option<T>) {
+    if let Some(value) = inherit {
+        *original = Some((*value).clone());
+        println!("Inherited: {:?}", inherit);
+    } else {
+        println!("Keeping [...] of type {}", type_name::<T>());
     }
 }
 
@@ -328,13 +330,40 @@ impl TextSettings {
         }
     }
 
-    pub(crate) fn indent_one(&self, x: f32) -> f32 {
+    pub(crate) fn indent_one(&self, x: f32, is_first_line: bool) -> f32 {
+        println!("indent_one");
+        println!("  In X: {}", x);
+
         if let Some(indentation) = self.indentation_left {
+            println!("  IndentationLeft: {}", indentation);
+
             let indentation = indentation as f32 * TWELFTEENTH_POINT;
-            return ((x / indentation) + 1.0) * indentation;
+            println!("  Step: {}", indentation);
+
+            let x = ((x / indentation) as u32 + 2) as f32 * indentation;
+            println!("  X: {}", x);
+
+            // return if let Some(hanging) = self.indentation_hanging {
+            //     x - hanging as f32 * TWELFTEENTH_POINT
+            // } else {
+            //     x
+            // }
+            return x;
         }
 
         x
+    }
+
+    pub fn parse_element_ind(&mut self, node: &xml::Node) {
+        // The w:left is a MSOFFICE quirk I believe, it isn't part
+        // of the ECMA/ISO standard.
+        if let Some(value) = node.attribute((WORD_PROCESSING_XML_NAMESPACE, "left")) {
+            self.indentation_left = Some(value.parse().unwrap());
+        }
+
+        if let Some(value) = node.attribute((WORD_PROCESSING_XML_NAMESPACE, "hanging")) {
+            self.indentation_hanging = Some(value.parse().unwrap());
+        }
     }
 
 }

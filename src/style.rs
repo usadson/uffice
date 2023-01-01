@@ -1,4 +1,4 @@
-// Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
+// Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
 use roxmltree as xml;
@@ -14,13 +14,14 @@ fn is_correct_namespace(element: &xml::Node) -> bool {
     if element.tag_name().namespace().is_none() {
         return false;
     }
-    
+
     element.tag_name().namespace().unwrap() == WORD_PROCESSING_XML_NAMESPACE
 }
 
 impl Style {
 
-    pub fn from_document_by_style_id(manager: &mut StyleManager, document: &xml::Document, name: &str) -> Result<Self, Error> {
+    pub fn from_document_by_style_id(manager: &mut StyleManager, numbering_manager: &crate::wp::numbering::NumberingManager,
+                                     document: &xml::Document, name: &str) -> Result<Self, Error> {
         assert!(is_correct_namespace(&document.root_element()));
 
         for element in document.root_element().children() {
@@ -30,7 +31,7 @@ impl Style {
 
             if let Some(id) = element.attribute((WORD_PROCESSING_XML_NAMESPACE, "styleId")) {
                 if id == name {
-                    return Self::from_xml(manager, &element)
+                    return Self::from_xml(manager, numbering_manager, &element)
                 }
             }
         }
@@ -38,7 +39,7 @@ impl Style {
         Err(Error::StyleNotFound)
     }
 
-    pub fn from_xml(manager: &mut StyleManager, element: &xml::Node) -> Result<Self, Error> {
+    pub fn from_xml(manager: &mut StyleManager, numbering_manager: &crate::wp::numbering::NumberingManager, element: &xml::Node) -> Result<Self, Error> {
         assert!(element.tag_name().namespace().is_some());
         assert_eq!(element.tag_name().namespace().unwrap(), WORD_PROCESSING_XML_NAMESPACE);
 
@@ -47,7 +48,10 @@ impl Style {
         };
 
         for child in element.children() {
+            println!("Style>> {}", child.tag_name().name());
+
             if child.tag_name().namespace().is_none() || child.tag_name().namespace().unwrap() != WORD_PROCESSING_XML_NAMESPACE {
+                println!("Incorrect namespace: {:?}", child.tag_name().namespace());
                 continue;
             }
 
@@ -55,11 +59,11 @@ impl Style {
                 "basedOn" => {
                     let val = child.attribute((WORD_PROCESSING_XML_NAMESPACE, "val"))
                             .expect("No w:val attribute on w:basedOn element!");
-                    
+
                     assert_ne!(element.attribute((WORD_PROCESSING_XML_NAMESPACE, "styleId")).unwrap(), val,
                             "The w:basedOn is used recursively on the same <w:style>! This is an error!");
 
-                    if let Ok(based_on_style) = manager.find_style_using_document(val, element.document()) {
+                    if let Ok(based_on_style) = manager.find_style_using_document(val, element.document(), numbering_manager) {
                         style.inherit_from(based_on_style);
                     }
                 }
@@ -68,12 +72,18 @@ impl Style {
                     settings.apply_run_properties_element(manager, &child);
                     style.text_settings = settings;
                 }
-                _ => ()
+                "pPr" => {
+                    crate::word_processing::process_paragraph_properties_element(numbering_manager, manager,
+                        &mut style.text_settings, &child);
+                }
+                _ => {
+                    println!("  Unknown");
+                }
             }
         }
-        
+
         Ok(style)
-    } 
+    }
 
     fn inherit_from(&mut self, style: &Style) {
         self.text_settings = style.text_settings.clone();
@@ -108,7 +118,7 @@ fn process_xml_rpr_default(element: &xml::Node, manager: &mut StyleManager) {
         match child.tag_name().name() {
             "rPr" => {
                 let mut settings = manager.default_text_settings.clone();
-                
+
                 settings.apply_run_properties_element(manager, &child);
 
                 manager.default_text_settings = settings;
@@ -119,9 +129,9 @@ fn process_xml_rpr_default(element: &xml::Node, manager: &mut StyleManager) {
 }
 
 impl StyleManager {
-    pub fn from_document(document: &xml::Document) -> Result<Self, Error> {
+    pub fn from_document(document: &xml::Document, numbering_manager: &crate::wp::numbering::NumberingManager) -> Result<Self, Error> {
         let mut manager = StyleManager{
-            styles: HashMap::new(), 
+            styles: HashMap::new(),
             default_text_settings: TextSettings::new()
         };
 
@@ -144,7 +154,8 @@ impl StyleManager {
                 "style" =>
                     match element.attribute((WORD_PROCESSING_XML_NAMESPACE, "styleId")) {
                         Some(id) => {
-                            let style = Style::from_xml(&mut manager, &element)?;
+                            println!("Style> {}", id);
+                            let style = Style::from_xml(&mut manager, numbering_manager, &element)?;
                             manager.styles.insert(String::from(id), style);
                         }
                         None => {
@@ -158,9 +169,9 @@ impl StyleManager {
         Ok(manager)
     }
 
-    fn find_style_using_document(&mut self, name: &str, document: &xml::Document) -> Result<&Style, Error> {
+    fn find_style_using_document(&mut self, name: &str, document: &xml::Document, numbering_manager: &crate::wp::numbering::NumberingManager) -> Result<&Style, Error> {
         if !self.styles.contains_key(name) {
-            let style = Style::from_document_by_style_id(self, document, name)?;
+            let style = Style::from_document_by_style_id(self, numbering_manager, document, name)?;
 
             self.styles.insert(String::from(name), style);
         }
@@ -175,6 +186,8 @@ impl StyleManager {
     pub fn apply_paragraph_style(&self, style_id: &str, paragraph_text_settings: &mut TextSettings) {
         if let Some(style) = self.styles.get(style_id) {
             paragraph_text_settings.inherit_from(&style.text_settings);
+        } else {
+            panic!("Style not found: {}", style_id);
         }
     }
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
+// Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
 use roxmltree as xml;
@@ -9,7 +9,7 @@ use std::{
     path::Path,
     process::exit,
     cell::RefCell,
-    rc::Rc, borrow::Borrow, marker::PhantomData
+    rc::Rc,
 };
 
 use sfml::{
@@ -26,7 +26,7 @@ use crate::{
     error::Error,
     relationships::Relationships,
     wp::{
-        Document, Node, painter::Painter
+        Document, Node, painter::Painter, numbering
     }
 };
 
@@ -273,7 +273,8 @@ fn process_pragraph_element(context: &mut Context,
     if let Some(first_child) = node.first_child() {
         // Paragraph Properties section 17.3.1.26
         if first_child.tag_name().name() == "pPr" {
-            process_paragraph_properties_element(context, paragraph.clone(), &first_child);
+            println!("│  ├─ {}", first_child.tag_name().name());
+            process_paragraph_properties_element_for_paragraph(context, paragraph.clone(), &first_child);
         }
     }
 
@@ -284,11 +285,12 @@ fn process_pragraph_element(context: &mut Context,
         if let Some(numbering) = pref.text_settings.numbering.clone() {
             drop(pref);
             let node = numbering.create_node(paragraph.clone(), &mut line_layout, &context.font_source);
-            position.x += node.as_ref().borrow().size.x
-             + paragraph.as_ref().borrow().text_settings.indent_one(position.x)
-             ;
+            position.x += node.as_ref().borrow().size.x;
+            println!("Numbering Width: {}", node.as_ref().borrow().size.x);
         }
     }
+
+    position.x = paragraph.as_ref().borrow().text_settings.indent_one(position.x, true);
 
     for child in node.children() {
         println!("│  ├─ {}", child.tag_name().name());
@@ -342,10 +344,8 @@ fn process_pragraph_element(context: &mut Context,
 }
 
 // pPr
-fn process_paragraph_properties_element(context: &Context, paragraph: Rc<RefCell<wp::Node>>, node: &xml::Node) {
-    let mut paragraph = paragraph.borrow_mut();
-    let paragraph_text_settings = &mut paragraph.text_settings;
-
+pub fn process_paragraph_properties_element(numbering_manager: &numbering::NumberingManager, style_manager: &StyleManager,
+                                            paragraph_text_settings: &mut text_settings::TextSettings, node: &xml::Node) {
     for property in node.children() {
         println!("│  │  ├─ {}", property.tag_name().name());
         for attr in property.attributes() {
@@ -363,6 +363,8 @@ fn process_paragraph_properties_element(context: &Context, paragraph: Rc<RefCell
         }
 
         match property.tag_name().name() {
+            "ind" => paragraph_text_settings.parse_element_ind(&property),
+
             // 17.3.1.13 jc (Paragraph Alignment)
             "jc" => {
                 let val = property.attribute((WORD_PROCESSING_XML_NAMESPACE, "val"))
@@ -382,13 +384,13 @@ fn process_paragraph_properties_element(context: &Context, paragraph: Rc<RefCell
                 }
             }
 
-            "numPr" => process_numbering_definition_instance_reference_property(context, &property, paragraph_text_settings),
+            "numPr" => process_numbering_definition_instance_reference_property(numbering_manager, &property, paragraph_text_settings),
 
             // Paragraph Style
             "pStyle" => {
                 let style_id = property.attribute((WORD_PROCESSING_XML_NAMESPACE, "val"))
                         .expect("No w:val in a <w:pStyle> element!");
-                context.style_manager.apply_paragraph_style(style_id, paragraph_text_settings);
+                style_manager.apply_paragraph_style(style_id, paragraph_text_settings);
             }
 
             // Run Properties section 17.3.2.28
@@ -413,8 +415,15 @@ fn process_paragraph_properties_element(context: &Context, paragraph: Rc<RefCell
     }
 }
 
+fn process_paragraph_properties_element_for_paragraph(context: &Context, paragraph: Rc<RefCell<wp::Node>>, node: &xml::Node) {
+    let mut paragraph = paragraph.borrow_mut();
+    let paragraph_text_settings = &mut paragraph.text_settings;
+
+    process_paragraph_properties_element(&context.numbering_manager, context.style_manager, paragraph_text_settings, node);
+}
+
 // 17.3.1.19 numPr (Numbering Definition Instance Reference)
-fn process_numbering_definition_instance_reference_property(context: &Context, node: &xml::Node, text_settings: &mut text_settings::TextSettings) {
+fn process_numbering_definition_instance_reference_property(numbering_manager: &wp::numbering::NumberingManager, node: &xml::Node, text_settings: &mut text_settings::TextSettings) {
     let mut numbering = Numbering{
         definition: None,
         level: None,
@@ -438,7 +447,7 @@ fn process_numbering_definition_instance_reference_property(context: &Context, n
                 let instance_id = child.attribute((WORD_PROCESSING_XML_NAMESPACE, "val"))
                     .expect("No w:val attribute on <w:numId>!").parse().unwrap();
 
-                numbering.definition = context.numbering_manager.find_definition_instance(instance_id);
+                numbering.definition = numbering_manager.find_definition_instance(instance_id);
             }
 
             _ => ()

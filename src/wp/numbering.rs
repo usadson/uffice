@@ -359,17 +359,7 @@ impl NumberingLevelDefinition {
     fn parse_number_level_associated_paragraph_properties(&mut self, node: &xml::Node) {
         for child in node.children() {
             match child.tag_name().name() {
-                "ind" => {
-                    // The w:left is a MSOFFICE quirk I believe, it isn't part
-                    // of the ECMA/ISO standard.
-                    if let Some(value) = child.attribute((WORD_PROCESSING_XML_NAMESPACE, "left")) {
-                        self.text_settings.indentation_left = Some(value.parse().unwrap());
-                    }
-
-                    if let Some(value) = child.attribute((WORD_PROCESSING_XML_NAMESPACE, "hanging")) {
-                        self.text_settings.indentation_hanging = Some(value.parse().unwrap());
-                    }
-                }
+                "ind" => self.text_settings.parse_element_ind(node),
 
                 _ => ()
             }
