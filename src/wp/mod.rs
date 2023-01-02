@@ -25,7 +25,7 @@ use self::painter::Painter;
 #[derive(Debug)]
 pub enum NodeData {
     Document(Document),
-    Drawing(),
+    Drawing(crate::drawing_ml::DrawingObject),
     Hyperlink(Hyperlink),
 
     /// The numbering parent is an invisible parent which contains a single
@@ -121,6 +121,10 @@ impl Node {
         match &self.data {
             NodeData::Hyperlink(hyperlink) => hyperlink.on_event(event),
             NodeData::TextPart(part) => part.on_event(self, event),
+            NodeData::Drawing(drawing) => match event {
+                Event::Paint(painter) => drawing.draw(self.position, painter),
+                _ => ()
+            }
             _ => ()
         }
     }

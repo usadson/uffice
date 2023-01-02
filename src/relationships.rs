@@ -2,13 +2,14 @@
 // All Rights Reserved.
 
 use roxmltree as xml;
-use std::{collections::HashMap, rc::Rc, cell::RefCell};
+use zip::ZipArchive;
+use std::{collections::HashMap, rc::Rc, cell::RefCell, fs::File};
 
 use crate::{
     error::Error,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum RelationshipType {
     Unknown,
 
@@ -63,6 +64,7 @@ pub struct Relationship {
     pub id: Rc<str>,
     pub relation_type: RelationshipType,
     pub target: String,
+    pub data: Vec<u8>,
 }
 
 pub struct Relationships {
@@ -76,7 +78,7 @@ impl Relationships {
         }
     }
 
-    pub fn load_xml(document: &xml::Document) -> Result<Self, Error> {
+    pub fn load_xml(document: &xml::Document, zip_archive: &mut ZipArchive<File>) -> Result<Self, Error> {
         assert_eq!(document.root_element().tag_name().name(), "Relationships");
 
         let mut relationships = HashMap::new();
@@ -85,7 +87,7 @@ impl Relationships {
             if relationship_xml.tag_name().name() != "Relationship" {
                 continue;
             }
-            
+
             #[cfg(feature = "debug-relationships")]
             {
                println!("Relationship");
@@ -98,15 +100,27 @@ impl Relationships {
             let relation_type = RelationshipType::convert(relation_type.unwrap());
 
             let id: Rc<str> = relationship_xml.attribute("Id").unwrap().into();
+            let target = relationship_xml.attribute("Target").unwrap();
+
+            let mut data = Vec::new();
+            if relation_type.unwrap() == RelationshipType::Image {
+                match &mut zip_archive.by_name(&format!("word/{}", target)) {
+                    Ok(file) => {
+                        std::io::copy(file, &mut data).expect("Failed to read Image");
+                    }
+                    Err(e) => panic!("Failed to load target \"{}\": {}", target, e)
+                }
+            }
 
             relationships.insert(id.clone(), Rc::new(RefCell::new(Relationship{
                 id: id.clone(),
                 relation_type: relation_type.unwrap(),
-                target: String::from(relationship_xml.attribute("Target").unwrap()),
+                target: String::from(target),
+                data
             })));
         }
 
-        Ok(Self { 
+        Ok(Self {
             relationships
         })
     }

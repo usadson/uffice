@@ -179,12 +179,14 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
 
 fn process_drawing_element(context: &mut Context, parent: Rc<RefCell<Node>>,
                            node: &xml::Node, position: Vector2f) -> Vector2f {
-    let drawing = wp::create_child(parent.clone(), wp::NodeData::Drawing());
-
     for child in node.children() {
         match child.tag_name().name() {
             "inline" => {
+                let drawing_object = drawing_ml::DrawingObject::parse_inline_object(&child, context.document_relationships);
+                let size = drawing_object.size();
 
+                let inline_drawing = wp::create_child(parent.clone(), wp::NodeData::Drawing(drawing_object));
+                inline_drawing.borrow_mut().size = size;
             }
 
             _ => ()

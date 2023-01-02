@@ -30,12 +30,14 @@ use crate::wp::numbering::NumberingManager;
 
 pub const SCROLL_BAR_WIDTH: f32 = 20.0;
 
-fn load_archive_file_to_string(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Option<Rc<String>> {
-    if let Ok(zip_document) = archive.by_name(name) {
-        Some(Rc::new(std::io::read_to_string(zip_document)
-                .expect("Failed to read")))
-    } else {
-        None
+pub fn load_archive_file_to_string(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Option<Rc<String>> {
+    match archive.by_name(name) {
+        Ok(zip_document) => Some(Rc::new(std::io::read_to_string(zip_document)
+                .expect("Failed to read"))),
+        Err(e) => {
+            println!("Error: {} for name \"{}\"", e, name);
+            None
+        }
     }
 }
 
@@ -61,7 +63,7 @@ fn draw_document(archive_path: &str) -> DocumentResult {
         let txt = load_archive_file_to_string(&mut archive, "word/_rels/document.xml.rels")
                 .expect("Document.xml.rels missing, assuming this is not a DOCX file.");
         if let Ok(document) = xml::Document::parse(&txt) {
-            document_relationships = Relationships::load_xml(&document).unwrap();
+            document_relationships = Relationships::load_xml(&document, &mut archive).unwrap();
         } else {
             println!("[Relationships] (word/_rels/document.xml.rels) Error!");
             document_relationships = Relationships::empty();
