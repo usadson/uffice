@@ -1,4 +1,4 @@
-// Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
+// Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
 mod application;
@@ -6,6 +6,7 @@ mod color_parser;
 mod drawing_ml;
 mod error;
 mod fonts;
+mod gui;
 mod relationships;
 mod style;
 mod text_settings;
@@ -33,8 +34,9 @@ fn main() {
 
     println!(">> Uffice <<");
 
-    let mut app = Application::new(
-            std::env::var("UFFICE_TEST_FILE").expect("No file given")
-    );
-    app.run();
+    // let mut app = Application::new(
+    //         std::env::var("UFFICE_TEST_FILE").expect("No file given")
+    // );
+    // app.run();
+    gui::app::App::run();
 }
