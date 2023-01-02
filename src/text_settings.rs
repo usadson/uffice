@@ -7,7 +7,7 @@ use font_kit::family_name::FamilyName;
 use roxmltree as xml;
 use sfml::{graphics::{Color, TextStyle, Font, Text}, system::Vector2f};
 
-use crate::{word_processing::{HALF_POINT, TWELFTEENTH_POINT}, color_parser, WORD_PROCESSING_XML_NAMESPACE, style::StyleManager, wp::layout::LineLayout};
+use crate::{word_processing::{HALF_POINT, TWELFTEENTH_POINT}, color_parser, WORD_PROCESSING_XML_NAMESPACE, style::StyleManager, wp::layout::LineLayout, fonts::FontManager};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Size {
@@ -102,7 +102,7 @@ pub struct Numbering {
 }
 impl Numbering {
     pub fn create_node(&self, paragraph: Rc<RefCell<crate::wp::Node>>, line_layout: &mut LineLayout,
-                       font_source: &font_kit::sources::multi::MultiSource) -> Rc<RefCell<crate::wp::Node>> {
+                       font_manager: &mut FontManager) -> Rc<RefCell<crate::wp::Node>> {
         assert!(paragraph.try_borrow_mut().is_ok());
         let numbering_definition_instance = &self.definition
                 .as_ref()
@@ -129,7 +129,7 @@ impl Numbering {
         let numbering_parent = crate::wp::create_child(paragraph.clone(), crate::wp::NodeData::NumberingParent);
         numbering_parent.borrow_mut().text_settings = self.combine_text_settings(&paragraph.as_ref().borrow(), &level);
 
-        crate::word_processing::append_text_element(&displayed_text, numbering_parent.clone(), line_layout, font_source);
+        crate::word_processing::append_text_element(&displayed_text, numbering_parent.clone(), line_layout, font_manager);
         let numbering_parent = numbering_parent.as_ref().borrow();
         numbering_parent.children.as_ref().unwrap().last().unwrap().clone()
     }
@@ -167,9 +167,6 @@ pub struct TextSettings {
 fn inherit_or_original<T: Clone + std::fmt::Debug>(inherit: &Option<T>, original: &mut Option<T>) {
     if let Some(value) = inherit {
         *original = Some((*value).clone());
-        println!("Inherited: {:?}", inherit);
-    } else {
-        println!("Keeping [...] of type {}", type_name::<T>());
     }
 }
 
@@ -205,34 +202,6 @@ impl TextSettings {
         inherit_or_original(&other.indentation_left, &mut self.indentation_left);
     }
 
-    pub fn load_font(&self, source: &font_kit::sources::multi::MultiSource) -> sfml::SfBox<Font> {
-        let font: &str = match &self.font {
-            Some(font) => font,
-            None => "Calibri"
-        };
-
-        let mut properties = font_kit::properties::Properties::new();
-
-        if self.bold.unwrap_or(false) {
-            properties.weight = font_kit::properties::Weight::BOLD;
-        }
-
-        let family_names = [FamilyName::Title(String::from(font))];
-        let handle = source.select_best_match(&family_names, &properties)
-                .expect("Failed to find font");
-
-        match handle {
-            font_kit::handle::Handle::Memory { bytes, font_index: _ } => {
-                unsafe {
-                    Font::from_memory(&bytes).unwrap()
-                }
-            }
-            font_kit::handle::Handle::Path { path, font_index: _ } => {
-                Font::from_file(path.to_str().unwrap()).unwrap()
-            }
-        }
-    }
-
     pub fn create_text<'a>(&self, font: &'a Font) -> Text<'a> {
         let character_size = match self.non_complex_text_size {
             Some(size) => size as f32 * HALF_POINT,
@@ -264,10 +233,10 @@ impl TextSettings {
         assert_eq!(element.tag_name().name(), "rPr");
 
         for run_property in element.children() {
-            println!("│  │  │  ├─ {}", run_property.tag_name().name());
-            for attr in run_property.attributes() {
-                println!("│  │  │  │  ├─ Attribute \"{}\" => \"{}\"", attr.name(), attr.value());
-            }
+            // println!("│  │  │  ├─ {}", run_property.tag_name().name());
+            // for attr in run_property.attributes() {
+            //     println!("│  │  │  │  ├─ Attribute \"{}\" => \"{}\"", attr.name(), attr.value());
+            // }
 
             match run_property.tag_name().name() {
                 "b" => {
@@ -294,7 +263,7 @@ impl TextSettings {
 
                 "rFonts" => {
                     for attr in run_property.attributes() {
-                        println!("│  │  │  │  ├─ Font Attribute: {} => {}", attr.name(), attr.value());
+                        //println!("│  │  │  │  ├─ Font Attribute: {} => {}", attr.name(), attr.value());
                         if attr.name() == "ascii" {
                             self.font = Some(String::from(attr.value()));
                         }
@@ -309,10 +278,10 @@ impl TextSettings {
 
                 "sz" => {
                     for attr in run_property.attributes() {
-                        println!("│  │  │  │  ├─ Size Attribute: {} => {}", attr.name(), attr.value());
+                        //println!("│  │  │  │  ├─ Size Attribute: {} => {}", attr.name(), attr.value());
                         if attr.name() == "val" {
                             let new_value = str::parse::<u32>(attr.value()).expect("Failed to parse attribute");
-                            println!("│  │  │  │  ├─ Value Attribute: old={:?} new={}", self.non_complex_text_size, new_value);
+                            //println!("│  │  │  │  ├─ Value Attribute: old={:?} new={}", self.non_complex_text_size, new_value);
                             self.non_complex_text_size = Some(new_value);
                         }
                     }
@@ -331,17 +300,17 @@ impl TextSettings {
     }
 
     pub(crate) fn indent_one(&self, x: f32, is_first_line: bool) -> f32 {
-        println!("indent_one");
-        println!("  In X: {}", x);
+        //println!("indent_one");
+        //println!("  In X: {}", x);
 
         if let Some(indentation) = self.indentation_left {
-            println!("  IndentationLeft: {}", indentation);
+            //println!("  IndentationLeft: {}", indentation);
 
             let indentation = indentation as f32 * TWELFTEENTH_POINT;
-            println!("  Step: {}", indentation);
+            //println!("  Step: {}", indentation);
 
             let x = ((x / indentation) as u32 + 2) as f32 * indentation;
-            println!("  X: {}", x);
+            //println!("  X: {}", x);
 
             // return if let Some(hanging) = self.indentation_hanging {
             //     x - hanging as f32 * TWELFTEENTH_POINT

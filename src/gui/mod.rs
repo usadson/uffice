@@ -2,3 +2,4 @@
 // All Rights Reserved.
 
 pub mod app;
+pub mod painter;

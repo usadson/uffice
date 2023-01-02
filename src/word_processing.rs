@@ -27,7 +27,7 @@ use crate::{
     relationships::Relationships,
     wp::{
         Document, Node, painter::Painter, numbering
-    }
+    }, fonts::FontManager
 };
 
 const CORE_FACTOR: f32 = 3.0f32;
@@ -39,7 +39,7 @@ struct Context<'a> {
     #[allow(dead_code)]
     document: &'a xml::Document<'a>,
 
-    font_source: font_kit::sources::multi::MultiSource,
+    font_manager: FontManager,
 
     document_relationships: &'a Relationships,
     style_manager: &'a StyleManager,
@@ -55,7 +55,7 @@ struct Context<'a> {
 
 fn load_page_settings(document: &xml::Document) -> Result<PageSettings, Error> {
     for root_child in document.root_element().first_child().unwrap().children() {
-        println!("Direct Root Child {}", root_child.tag_name().name());
+        // println!("Direct Root Child {}", root_child.tag_name().name());
         if root_child.tag_name().name() != "sectPr" {
             continue;
         }
@@ -112,12 +112,12 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
         page_settings.margins.top as f32 * TWELFTEENTH_POINT
     );
 
-    println!("Rendering Document:\n\tSize: {} x {}\n\tRender Size: {} x {}",
-        page_settings.size.width,
-        page_settings.size.height,
-        page_settings.size.width as f32 / 12f32,
-        page_settings.size.height as f32 / 12f32
-    );
+    // println!("Rendering Document:\n\tSize: {} x {}\n\tRender Size: {} x {}",
+    //    page_settings.size.width,
+    //    page_settings.size.height,
+    //    page_settings.size.width as f32 / 12f32,
+    //    page_settings.size.height as f32 / 12f32
+    //);
 
     let render_size = Vector2f::new(
         page_settings.size.width as f32 * TWELFTEENTH_POINT,
@@ -140,7 +140,7 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
 
     let mut context = Context{
         document,
-        font_source: font_kit::sources::multi::MultiSource::from_sources(resolve_font_sources()),
+        font_manager: FontManager::new(font_kit::sources::multi::MultiSource::from_sources(resolve_font_sources())),
 
         document_relationships,
         style_manager,
@@ -153,21 +153,21 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
     };
 
     for child in document.root_element().children() {
-        println!("{}", child.tag_name().name());
+        // println!("{}", child.tag_name().name());
 
         if child.tag_name().name() == "body" {
             position = process_body_element(&mut context, doc.clone(), &child, position);
         }
     }
 
-    let mut font_source = context.font_source;
+    let mut font_manager = context.font_manager;
 
     render_texture.display();
     render_texture.set_smooth(true);
 
     {
         let mut painter = Painter{
-            font_source: &mut font_source,
+            font_manager: &mut font_manager,
             render_texture: &mut render_texture,
         };
 
@@ -203,7 +203,7 @@ fn process_body_element(context: &mut Context,
     let mut position = position;
 
     for child in node.children() {
-        println!("├─ {}", child.tag_name().name());
+        // println!("├─ {}", child.tag_name().name());
         match child.tag_name().name() {
             "p" => position = process_pragraph_element(context, parent.clone(), &child, position),
             "sdt" => position = process_structured_document_tag(context, parent.clone(), &child, position),
@@ -220,16 +220,16 @@ fn process_hyperlink_element(context: &mut Context,
                              node: &xml::Node,
                              mut position: Vector2f) -> Vector2f {
     for attr in node.attributes() {
-        println!("│  │  ├─ A: \"{}\" => \"{}\"", attr.name(), attr.value());
+        // println!("│  │  ├─ A: \"{}\" => \"{}\"", attr.name(), attr.value());
     }
 
     let hyperlink_ref = wp::append_child(parent, wp::Node::new(wp::NodeData::Hyperlink(Default::default())));
 
     for child in node.children() {
-        println!("│  │  │  ├─ HC: {}", child.tag_name().name());
+        // println!("│  │  │  ├─ HC: {}", child.tag_name().name());
 
         for attr in child.attributes() {
-            println!("│  │  │  ├─   A: \"{}\" => \"{}\"", attr.name(), attr.value());
+            // println!("│  │  │  ├─   A: \"{}\" => \"{}\"", attr.name(), attr.value());
         }
 
         match child.tag_name().name() {
@@ -249,11 +249,11 @@ fn process_hyperlink_element(context: &mut Context,
                 hyperlink.relationship = Some(relationship.clone());
             }
         } else {
-            println!("[WARNING] <w:hyperlink> relationship not found: \"{}\" (out of {} relationship(s))",
-                relationship_id, context.document_relationships.len());
+            // println!("[WARNING] <w:hyperlink> relationship not found: \"{}\" (out of {} relationship(s))",
+            //    relationship_id, context.document_relationships.len());
         }
     } else {
-        println!("[WARNING] <w:hyperlink> doesn't have an r:id attribute!");
+        // println!("[WARNING] <w:hyperlink> doesn't have an r:id attribute!");
     }
 
     position
@@ -275,7 +275,7 @@ fn process_pragraph_element(context: &mut Context,
     if let Some(first_child) = node.first_child() {
         // Paragraph Properties section 17.3.1.26
         if first_child.tag_name().name() == "pPr" {
-            println!("│  ├─ {}", first_child.tag_name().name());
+            // println!("│  ├─ {}", first_child.tag_name().name());
             process_paragraph_properties_element_for_paragraph(context, paragraph.clone(), &first_child);
         }
     }
@@ -286,16 +286,16 @@ fn process_pragraph_element(context: &mut Context,
         let pref = paragraph.as_ref().borrow();
         if let Some(numbering) = pref.text_settings.numbering.clone() {
             drop(pref);
-            let node = numbering.create_node(paragraph.clone(), &mut line_layout, &context.font_source);
+            let node = numbering.create_node(paragraph.clone(), &mut line_layout, &mut context.font_manager);
             position.x += node.as_ref().borrow().size.x;
-            println!("Numbering Width: {}", node.as_ref().borrow().size.x);
+            // println!("Numbering Width: {}", node.as_ref().borrow().size.x);
         }
     }
 
     position.x = paragraph.as_ref().borrow().text_settings.indent_one(position.x, true);
 
     for child in node.children() {
-        println!("│  ├─ {}", child.tag_name().name());
+        // println!("│  ├─ {}", child.tag_name().name());
 
         match child.tag_name().name() {
             // 17.16.22 hyperlink (Hyperlink)
@@ -314,7 +314,7 @@ fn process_pragraph_element(context: &mut Context,
 
     let mut paragraph = paragraph.borrow_mut();
 
-    let font = paragraph.text_settings.load_font(&context.font_source);
+    let font = context.font_manager.load_font(&paragraph.text_settings);
     let text = paragraph.text_settings.create_text(&font);
 
     // The cursor is probably somewhere in the middle of the line.
@@ -337,7 +337,7 @@ fn process_pragraph_element(context: &mut Context,
     assert!(line_spacing >= 0.0);
     assert!(paragraph_spacing >= 0.0);
 
-    println!("│  ├─ Advancing {}  +  {}", line_spacing, paragraph_spacing);
+    // println!("│  ├─ Advancing {}  +  {}", line_spacing, paragraph_spacing);
     position.y += line_spacing + paragraph_spacing;
 
     paragraph.size = position - original_position;
@@ -349,18 +349,18 @@ fn process_pragraph_element(context: &mut Context,
 pub fn process_paragraph_properties_element(numbering_manager: &numbering::NumberingManager, style_manager: &StyleManager,
                                             paragraph_text_settings: &mut text_settings::TextSettings, node: &xml::Node) {
     for property in node.children() {
-        println!("│  │  ├─ {}", property.tag_name().name());
+        // println!("│  │  ├─ {}", property.tag_name().name());
         for attr in property.attributes() {
-            println!("│  │  │  ├─ Attribute: {} = {}", attr.name(), attr.value());
+            // println!("│  │  │  ├─ Attribute: {} = {}", attr.name(), attr.value());
         }
 
         for sub_property in property.children() {
-            println!("│  │  │  ├─ {}", sub_property.tag_name().name());
+            // println!("│  │  │  ├─ {}", sub_property.tag_name().name());
             for attr in sub_property.attributes() {
-                println!("│  │  │  │  ├─ A: {} = {}", attr.name(), attr.value());
+                // println!("│  │  │  │  ├─ A: {} = {}", attr.name(), attr.value());
             }
             for sub_property2 in sub_property.children() {
-                println!("│  │  │  │  ├─ P: {}", sub_property2.tag_name().name());
+                // println!("│  │  │  │  ├─ P: {}", sub_property2.tag_name().name());
             }
         }
 
@@ -381,7 +381,7 @@ pub fn process_paragraph_properties_element(numbering_manager: &numbering::Numbe
                     // this property anyway, so I inserted the quirk below.
                     "end" | "right" => paragraph_text_settings.justify = Some(TextJustification::End),
                     _ => {
-                        println!("│  │  │  ├─ E: Unknown Attribute Value");
+                        // println!("│  │  │  ├─ E: Unknown Attribute Value");
                     }
                 }
             }
@@ -402,7 +402,7 @@ pub fn process_paragraph_properties_element(numbering_manager: &numbering::Numbe
 
             "spacing" => {
                 for attribute in property.attributes() {
-                    println!("│  │  │  ├─ Spacing Attribute: {} = {}", attribute.name(), attribute.value());
+                    // println!("│  │  │  ├─ Spacing Attribute: {} = {}", attribute.name(), attribute.value());
                     match attribute.name() {
                         "after" => {
                             paragraph_text_settings.spacing_below_paragraph = Some(str::parse(attribute.value())
@@ -432,9 +432,9 @@ fn process_numbering_definition_instance_reference_property(numbering_manager: &
     };
 
     for child in node.children() {
-        println!("│  │  │  ├─ {}", child.tag_name().name());
+        // println!("│  │  │  ├─ {}", child.tag_name().name());
         for attr in child.attributes() {
-            println!("│  │  │  │  ├─ Attribute: {} = {}", attr.name(), attr.value());
+            // println!("│  │  │  │  ├─ Attribute: {} = {}", attr.name(), attr.value());
         }
 
         match child.tag_name().name() {
@@ -466,7 +466,7 @@ fn process_numbering_definition_instance_reference_property(numbering_manager: &
 fn process_sdt_built_in_doc_part(context: &mut Context, parent: Rc<RefCell<Node>>, node: &xml::Node) {
 
     for child in node.children() {
-        println!("│  │  │  ├─ {}", child.tag_name().name());
+        // println!("│  │  │  ├─ {}", child.tag_name().name());
 
         match child.tag_name().name() {
             "docPartGallery" => process_sdt_document_part_gallery_filter(context, parent.clone(), &child),
@@ -477,14 +477,14 @@ fn process_sdt_built_in_doc_part(context: &mut Context, parent: Rc<RefCell<Node>
 
 fn process_sdt_document_part_gallery_filter(_context: &mut Context, _parent: Rc<RefCell<Node>>, node: &xml::Node) {
     for attr in node.attributes() {
-        println!("│  │  │  │  ├─ Attribute \"{}\" => \"{}\"   in namespace \"{}\"", attr.name(), attr.value(), attr.namespace().unwrap_or(""));
+        // println!("│  │  │  │  ├─ Attribute \"{}\" => \"{}\"   in namespace \"{}\"", attr.name(), attr.value(), attr.namespace().unwrap_or(""));
     }
 }
 
 /// Process the <w:sdtPr> element
 fn process_std_properties(context: &mut Context, parent: Rc<RefCell<Node>>, node: &xml::Node) {
     for child in node.children() {
-        println!("│  │  ├─ {}", child.tag_name().name());
+        // println!("│  │  ├─ {}", child.tag_name().name());
 
         match child.tag_name().name() {
             "docPartObj" => process_sdt_built_in_doc_part(context, parent.clone(), &child),
@@ -496,7 +496,7 @@ fn process_std_properties(context: &mut Context, parent: Rc<RefCell<Node>>, node
 /// Process the <w:sdtEndPr> element
 fn process_sdt_end_character_properties(_context: &mut Context, _parent: Rc<RefCell<Node>>, node: &xml::Node) {
     for child in node.children() {
-        println!("│  │  ├─ {}", child.tag_name().name());
+        // println!("│  │  ├─ {}", child.tag_name().name());
     }
 }
 
@@ -505,7 +505,7 @@ fn process_sdt_content(context: &mut Context, parent: Rc<RefCell<Node>>, node: &
     let mut position = original_position;
 
     for child in node.children() {
-        println!("│  │  ├─ {}", child.tag_name().name());
+        // println!("│  │  ├─ {}", child.tag_name().name());
         match child.tag_name().name() {
             "p" => position = process_pragraph_element(context, parent.clone(), &child, position),
             _ => ()
@@ -526,7 +526,7 @@ fn process_structured_document_tag(context: &mut Context,
     let sdt = wp::append_child(parent, wp::Node::new(wp::NodeData::StructuredDocumentTag(Default::default())));
 
     for child in node.children() {
-        println!("│  ├─ {}", child.tag_name().name());
+        // println!("│  ├─ {}", child.tag_name().name());
 
         match child.tag_name().name() {
             "sdtContent" => position = process_sdt_content(context, sdt.clone(), &child, original_position),
@@ -552,9 +552,9 @@ fn process_text_element(context: &mut Context,
     for child in node.children() {
         if child.node_type() == xml::NodeType::Text {
             let text_string = child.text().unwrap();
-            println!("│  │  │  ├─ Text: \"{}\"", text_string);
+            // println!("│  │  │  ├─ Text: \"{}\"", text_string);
 
-            let font = text_node.as_ref().borrow().text_settings.load_font(&context.font_source);
+            let font = context.font_manager.load_font(&text_node.as_ref().borrow().text_settings);
 
             let mut text = text_node.as_ref().borrow().text_settings.create_text(&font);
 
@@ -565,8 +565,8 @@ fn process_text_element(context: &mut Context,
     position
 }
 
-pub fn append_text_element(text_string: &str, parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, font_source: &font_kit::sources::multi::MultiSource) -> Vector2f {
-    let font = parent.as_ref().borrow().text_settings.load_font(&font_source);
+pub fn append_text_element(text_string: &str, parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, font_manager: &mut FontManager) -> Vector2f {
+    let font = font_manager.load_font(&parent.as_ref().borrow().text_settings);
     let mut text = parent.as_ref().borrow().text_settings.create_text(&font);
 
     let position = parent.as_ref().borrow().position;
@@ -620,8 +620,8 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
 
         let stop_reason;
 
-        #[cfg(feature = "debug-text-layout")]
-        println!("width({}) < max_width_fitting_on_page({}) \"{}\"", width, max_width_fitting_on_page, line);
+        //#[cfg(feature = "debug-text-layout")]
+        // println!("width({}) < max_width_fitting_on_page({}) \"{}\"", width, max_width_fitting_on_page, line);
 
         if let Some((next_index, next_word)) = iter.peek() {
             let line_with_next = &text_string[start..(next_index + next_word.bytes().count())];
@@ -654,8 +654,8 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
 
         #[cfg(feature = "debug-text-layout")]
         {
-            println!("│  │  │  │  ├─ Line: \"{}\", stop_reason={:?}", line, stop_reason);
-            println!("│  │  │  │  ├─ Calculation: x={} w={} m={}", position.x, width, max_width_fitting_on_page);
+            // println!("│  │  │  │  ├─ Line: \"{}\", stop_reason={:?}", line, stop_reason);
+            // println!("│  │  │  │  ├─ Calculation: x={} w={} m={}", position.x, width, max_width_fitting_on_page);
         }
 
         let text_part_ref = wp::append_child(parent.clone(), wp::Node::new(wp::NodeData::TextPart(wp::TextPart{ text: String::from(line) })));
@@ -695,10 +695,10 @@ fn process_text_run_element(context: &mut Context,
     let text_run = wp::append_child(parent, wp::Node::new(wp::NodeData::TextRun()));
 
     for text_run_property in node.children() {
-        println!("│  │  ├─ {}", text_run_property.tag_name().name());
+        // println!("│  │  ├─ {}", text_run_property.tag_name().name());
 
         for attr in text_run_property.attributes() {
-            println!("│  │  │  ├─ Attribute \"{}\" → \"{}\"", attr.name(), attr.value());
+            // println!("│  │  │  ├─ Attribute \"{}\" → \"{}\"", attr.name(), attr.value());
         }
 
         match text_run_property.tag_name().name() {
@@ -729,15 +729,15 @@ fn resolve_font_sources() -> Vec<Box<(dyn font_kit::source::Source + 'static)>> 
         //let d = windows::Storage::
 
         let str = format!("{}\\Microsoft\\FontCache\\4\\CloudFonts", env!("LOCALAPPDATA"));
-        println!("Path: {:?}", str);
+        // println!("Path: {:?}", str);
 
         match Path::new(&str).canonicalize() {
             Ok(path) => {
-                println!("[ResolveFontSources] Canonical: {:?}", path);
+                // println!("[ResolveFontSources] Canonical: {:?}", path);
                 sources.push(path);
             }
             Err(e) => {
-                println!("[ResolveFontSources] Failed to locate Windows FontCache \"{}\": {:?}", str, e);
+                // println!("[ResolveFontSources] Failed to locate Windows FontCache \"{}\": {:?}", str, e);
 
                 exit(0)
             }

@@ -1,7 +1,12 @@
 // Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, collections::HashMap, rc::Rc};
+
+use font_kit::family_name::FamilyName;
+use sfml::graphics::Font;
+
+use crate::text_settings;
 
 // TODO Implement file watching to look for new fonts installed during the running of the program ^_^
 pub struct WinFontCacheSource {
@@ -127,3 +132,81 @@ impl font_kit::source::Source for WinFontCacheSource {
         todo!()
     }
 }
+
+pub struct FontManager {
+    source: font_kit::sources::multi::MultiSource,
+    cache: HashMap<String, CacheEntry>,
+}
+
+struct CacheEntry {
+    variant_bold: Option<Rc<sfml::SfBox<Font>>>,
+    variant_normal: Option<Rc<sfml::SfBox<Font>>>,
+}
+
+impl CacheEntry {
+    fn new() -> Self {
+        Self {
+            variant_bold: None,
+            variant_normal: None,
+        }
+    }
+}
+
+impl FontManager {
+    pub fn new(source: font_kit::sources::multi::MultiSource) -> Self {
+        Self {
+            source,
+            cache: HashMap::new(),
+        }
+    }
+
+    pub fn load_font(&mut self, text_settings: &text_settings::TextSettings) -> Rc<sfml::SfBox<Font>> {
+        let font: &str = match &text_settings.font {
+            Some(font) => font,
+            None => "Calibri"
+        };
+
+        let mut properties = font_kit::properties::Properties::new();
+
+        let bold = text_settings.bold.unwrap_or(false);
+        if bold {
+            properties.weight = font_kit::properties::Weight::BOLD;
+        }
+
+        let entry = self.cache.entry(String::from(font)).or_insert_with(|| CacheEntry::new());
+        if bold {
+            if let Some(font) = &entry.variant_bold {
+                return font.clone();
+            }
+        } else {
+            if let Some(font) = &entry.variant_normal {
+                return font.clone();
+            }
+        }
+
+        let family_names = [FamilyName::Title(String::from(font))];
+        let handle = self.source.select_best_match(&family_names, &properties)
+                .expect("Failed to find font");
+
+
+        let font = match handle {
+            font_kit::handle::Handle::Memory { bytes, font_index: _ } => {
+                unsafe {
+                    Font::from_memory(&bytes).unwrap()
+                }
+            }
+            font_kit::handle::Handle::Path { path, font_index: _ } => {
+                Font::from_file(path.to_str().unwrap()).unwrap()
+            }
+        };
+
+        if bold {
+            entry.variant_bold = Some(Rc::new(font));
+            return entry.variant_bold.as_ref().unwrap().clone();
+        }
+        entry.variant_normal = Some(Rc::new(font));
+        return entry.variant_normal.as_ref().unwrap().clone();
+    }
+}
+
+
