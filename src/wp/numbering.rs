@@ -307,6 +307,7 @@ impl NumberingLevelDefinition {
 
     pub fn format(&self, value: i32) -> String {
         match self.format {
+            NumberingFormat::Bullet => self.text.clone(),
             NumberingFormat::Decimal => format!("{}", value),
             NumberingFormat::LowerRoman => {
                 // TODO actually follow algorithm ^_^
@@ -334,6 +335,10 @@ impl NumberingLevelDefinition {
             }
             _ => {
                 println!("[Numbering] Unsupported numbering format: {:?}", self.format);
+                if !self.text.is_empty() {
+                    return self.text.clone();
+                }
+
                 String::from("UNSUPPORTED FORMAT")
             }
         }
