@@ -7,7 +7,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::time::Instant;
 
+use font_kit::family_name::FamilyName;
 use roxmltree as xml;
 
 use sfml::SfBox;
@@ -36,6 +38,9 @@ const VERTICAL_PAGE_MARGIN: f32 = 20.0;
 
 // The gaps between the pages.
 const VERTICAL_PAGE_GAP: f32 = 30.0;
+
+// The background color of the application. This is the color under the pages.
+const APPLICATION_BACKGROUND_COLOR: Color = Color::rgb(29, 28, 33);
 
 pub fn load_archive_file_to_string(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Option<Rc<String>> {
     match archive.by_name(name) {
@@ -137,10 +142,6 @@ impl Scroller {
         }
     }
 
-    pub fn offset(&self, value: f32) -> f32 {
-        self.value / 5.0 * value
-    }
-
     pub fn draw(&mut self, shape: &mut RectangleShape, parent: &mut RenderWindow) {
         let window_size = parent.size();
         self.window_height = window_size.y as f32;
@@ -164,6 +165,41 @@ impl Scroller {
 
     pub fn apply_mouse_offset(&mut self, value: f32) {
         self.value += value / (self.window_height as f32 - self.scroll_bar_rect.height);
+    }
+}
+
+struct Animator {
+    begin: Instant,
+    delay_ms: f32,
+}
+
+impl Animator {
+    pub fn new() -> Self {
+        Self {
+            begin: Instant::now(),
+            delay_ms: 220.0,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.begin = Instant::now();
+    }
+
+    pub fn update(&mut self) -> f32 {
+        let now = Instant::now();
+        let diff = now.duration_since(self.begin);
+
+        if diff.as_millis() > self.delay_ms as u128 {
+            return 1.0;
+        }
+
+        let value = diff.as_millis() as f32 / self.delay_ms;
+
+        return if value > 1.0 {
+            1.0
+        } else {
+            value
+        }
     }
 }
 
@@ -262,6 +298,38 @@ impl Application {
         });
     }
 
+    fn display_loading_screen(&mut self) {
+        self.window.clear(APPLICATION_BACKGROUND_COLOR);
+
+        let font_source = font_kit::source::SystemSource::new();
+        let font_handle = font_source.select_best_match(&[
+            FamilyName::Title(String::from("Segoe UI")),
+            FamilyName::Title(String::from("Noto Sans")),
+            FamilyName::SansSerif
+        ], &font_kit::properties::Properties::new())
+            .expect("Failed to find a system font!");
+
+        let font;
+        match &font_handle {
+            font_kit::handle::Handle::Memory { bytes, font_index } => unsafe {
+                font = Font::from_memory(&bytes.as_ref());
+            }
+            font_kit::handle::Handle::Path { path, font_index } => {
+                font = Font::from_file(path.to_str().unwrap());
+            }
+        }
+        let font = font.unwrap();
+
+        let mut text = sfml::graphics::Text::new(&format!("Loading {}", &self.archive_path), &font, 36);
+        text.set_position((
+            (self.window.size().x as f32 - text.local_bounds().width) / 2.0,
+            (self.window.size().y as f32 - text.local_bounds().height) / 2.0
+        ));
+
+        self.window.draw(&text);
+        self.window.display();
+    }
+
     pub fn run(&mut self) {
         let mut shape = sfml::graphics::RectangleShape::new();
         let mut left_button_pressed = false;
@@ -270,6 +338,8 @@ impl Application {
 
         let mut current_cursor_type = CursorType::Arrow;
         let mut new_cursor = None;
+
+        let mut page_introduction_animator = Animator::new();
 
         while self.window.is_open() {
             let window_size = self.window.size();
@@ -367,22 +437,21 @@ impl Application {
             new_cursor = None;
 
             if self.is_draw_invalidated.swap(false, Ordering::Relaxed) {
+                self.display_loading_screen();
+
                 let (new_page_textures, document) = draw_document(&self.archive_path);
                 self.page_textures = new_page_textures.render_targets;
                 self.document = Some(document);
 
                 self.scroller.document_height = self.calculate_content_height();
+                page_introduction_animator.reset();
             }
 
-            self.window.clear(Color::BLACK);
+            self.window.clear(APPLICATION_BACKGROUND_COLOR);
             let factor = 0.4;
             let mut y = (VERTICAL_PAGE_MARGIN - self.scroller.document_height * self.scroller.value) * factor;
-            let mut page_number = 0;
+
             for render_texture in &self.page_textures {
-                println!("Page {} is @ {} of {}", page_number, y, self.scroller.document_height * factor);
-
-                page_number += 1;
-
                 // I don't know rust well enough to be able to keep a Sprite
                 // around _and_ replace the texture.
                 //
@@ -403,6 +472,8 @@ impl Application {
                     centered_x,
                     y
                 ));
+
+                sprite.set_color(Color::rgba(255, 255, 255, (255.0 * page_introduction_animator.update()) as u8));
 
                 y += sprite.global_bounds().size().y + VERTICAL_PAGE_GAP * factor;
 
