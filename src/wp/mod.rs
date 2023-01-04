@@ -22,7 +22,7 @@ use crate::{
 
 use self::painter::Painter;
 
-#[derive(Debug)]
+#[derive(Debug, strum_macros::IntoStaticStr)]
 pub enum NodeData {
     Document(Document),
     Drawing(crate::drawing_ml::DrawingObject),
@@ -72,7 +72,8 @@ pub struct Node {
 
     /// The page number this node is starting on.
     /// (from 0)
-    pub page: usize,
+    pub page_first: usize,
+    pub page_last: usize,
 
     /// The position this node is starting from.
     pub position: Vector2f,
@@ -92,7 +93,8 @@ impl Node {
             children: Some(vec![]),
 
             data,
-            page: 0,
+            page_first: 0,
+            page_last: 0,
             position: Default::default(),
             text_settings: TextSettings::new(),
             size: Default::default(),
@@ -122,7 +124,7 @@ impl Node {
             NodeData::Hyperlink(hyperlink) => hyperlink.on_event(event),
             NodeData::TextPart(part) => part.on_event(self, event),
             NodeData::Drawing(drawing) => match event {
-                Event::Paint(painter) => drawing.draw(self.position, painter),
+                Event::Paint(painter) => drawing.draw(self.page_first, self.position, painter),
                 _ => ()
             }
             _ => ()
@@ -155,13 +157,26 @@ impl Node {
 
         false
     }
+
+    /// Sets the last page number of this Node and all it's parents.
+    pub fn set_last_page_number(&mut self, page_number: usize) {
+        assert!(self.page_last <= page_number);
+        self.page_last = page_number;
+
+        if let Some(parent) = self.parent.upgrade() {
+            parent.borrow_mut().set_last_page_number(page_number);
+        } else {
+            assert!(matches!(self.data, NodeData::Document(..)));
+        }
+    }
 }
 
 pub fn append_child<'b>(parent_ref: Rc<RefCell<Node>>, mut node: Node) -> Rc<RefCell<Node>> {
     let mut parent = parent_ref.borrow_mut();
     node.parent = Rc::downgrade(&parent_ref);
     node.text_settings = parent.text_settings.clone();
-    node.page = parent.page;
+    node.page_first = parent.page_last;
+    node.page_last = parent.page_last;
     node.position = parent.position;
 
     if let Some(children) = &mut parent.children {
@@ -178,7 +193,8 @@ pub fn create_child(parent_ref: Rc<RefCell<Node>>, data: NodeData) -> Rc<RefCell
         parent: Rc::downgrade(&parent_ref),
         children: Some(vec![]),
         data,
-        page: parent.page,
+        page_first: parent.page_last,
+        page_last: parent.page_last,
         position: parent.position,
         text_settings: parent.text_settings.clone(),
         size: Default::default(),
@@ -219,10 +235,10 @@ impl MouseEvent {
     }
 }
 
-pub enum Event<'a> {
+pub enum Event<'a, 'b> {
     Click(MouseEvent),
     Hover(MouseEvent),
-    Paint(&'a mut Painter<'a>),
+    Paint(&'b mut Painter<'a>),
 }
 
 #[derive(Debug)]
@@ -242,7 +258,7 @@ impl TextPart {
     pub fn on_event(&self, node: &Node, event: &mut Event) {
         match event {
             Event::Paint(painter) => {
-                painter.paint_text(&self.text, node.position, &node.text_settings)
+                painter.paint_text(&self.text, node.page_first, node.position, &node.text_settings)
             }
             _ => ()
         }

@@ -4,7 +4,7 @@
 use crate::relationships::{Relationship, Relationships};
 use roxmltree as xml;
 use sfml::{system::Vector2f, graphics::{Transformable, RenderTarget}};
-use std::{cell::RefCell, rc::Rc, borrow::Borrow};
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(Debug)]
 pub struct DrawingObject {
@@ -45,7 +45,7 @@ impl DrawingObject {
         }
     }
 
-    pub fn draw(&self, position: Vector2f, painter: &mut crate::wp::painter::Painter) {
+    pub fn draw<'a>(&self, page: usize, position: Vector2f, painter: &mut crate::wp::painter::Painter) {
         match &self.graphic {
             GraphicObject::Empty => (),
 
@@ -53,7 +53,8 @@ impl DrawingObject {
                 let image = picture.fill.as_ref().unwrap().blip.as_ref().unwrap().image.as_ref().unwrap();
 
                 let mut texture = sfml::graphics::Texture::new().unwrap();
-                texture.load_from_image(image, sfml::graphics::Rect::new(0, 0, image.size().x as i32, image.size().y as i32));
+                texture.load_from_image(image, sfml::graphics::Rect::new(0, 0, image.size().x as i32, image.size().y as i32))
+                    .expect("Failed to load image");
 
                 let mut sprite = sfml::graphics::Sprite::new();
                 sprite.set_texture(&texture, true);
@@ -66,7 +67,8 @@ impl DrawingObject {
                 ));
 
                 sprite.set_position(position);
-                painter.render_texture.draw(&sprite);
+                let page = painter.get_page(page);
+                page.as_ref().borrow_mut().draw(&sprite);
             }
         }
     }

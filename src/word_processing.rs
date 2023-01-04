@@ -8,7 +8,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use std::{
     path::Path,
     process::exit,
-    cell::RefCell,
+    cell::{RefCell, RefMut},
     rc::Rc,
 };
 
@@ -26,7 +26,7 @@ use crate::{
     error::Error,
     relationships::Relationships,
     wp::{
-        Document, Node, painter::Painter, numbering
+        Document, Node, painter::{Painter, PageRenderTargets}, numbering
     }, fonts::FontManager
 };
 
@@ -97,7 +97,7 @@ fn load_page_settings(document: &xml::Document) -> Result<PageSettings, Error> {
     panic!("No direct child \"sectPr\" of root element found :(");
 }
 
-pub type DocumentResult = (sfml::graphics::RenderTexture, Rc<RefCell<Node>>);
+pub type DocumentResult = (wp::painter::PageRenderTargets, Rc<RefCell<Node>>);
 
 pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
                         document_relationships: &Relationships,
@@ -123,11 +123,6 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
         page_settings.size.width as f32 * TWELFTEENTH_POINT,
         page_settings.size.height as f32 * TWELFTEENTH_POINT
     );
-
-    let mut render_texture = RenderTexture::new(render_size.x as u32, render_size.y as u32)
-            .expect("Failed to create RenderTexture for document");
-
-    render_texture.clear(Color::WHITE);
 
     let doc = Rc::new(
         RefCell::new(
@@ -162,19 +157,25 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
 
     let mut font_manager = context.font_manager;
 
-    render_texture.display();
-    render_texture.set_smooth(true);
-
+    let mut render_targets = PageRenderTargets{ render_targets: Vec::new() };
     {
-        let mut painter = Painter{
+        let mut painter = Painter {
+            pages: &mut render_targets,
+            page_size: render_size,
             font_manager: &mut font_manager,
-            render_texture: &mut render_texture,
+            last_texture_index: None,
         };
 
-        doc.borrow_mut().on_event(&mut wp::Event::Paint(&mut painter));
+        draw_document(doc.borrow_mut(), &mut painter);
     }
 
-    (render_texture, doc.clone())
+    (render_targets, doc.clone())
+}
+
+fn draw_document(mut document: RefMut<Node>, painter: &mut Painter) {
+    document.on_event(&mut wp::Event::Paint(painter));
+
+    painter.finish();
 }
 
 fn process_drawing_element(context: &mut Context, parent: Rc<RefCell<Node>>,
@@ -592,6 +593,8 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
 
     let mut previous_stop_reason = None;
 
+    let mut page_number = parent.as_ref().borrow().page_last;
+
     let mut iter = UnicodeSegmentation::split_word_bound_indices(text_string).peekable();
     while let Some((index, word)) = iter.next() {
         let start;
@@ -610,6 +613,13 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
         let max_width_fitting_on_page = line_layout.page_horizontal_end - position.x;
         if max_width_fitting_on_page < 0.0 || previous_stop_reason.is_some() {
             position.y += text.global_bounds().height + text.line_spacing() * LINE_SPACING;
+
+            if position.y > line_layout.page_vertical_end {
+                page_number += 1;
+                parent.borrow_mut().set_last_page_number(page_number);
+                position.y = line_layout.page_vertical_start;
+            }
+
             position.x = line_layout.page_horizontal_start;
 
             if iter.peek().is_some() {
@@ -660,6 +670,8 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
 
         let text_part_ref = wp::append_child(parent.clone(), wp::Node::new(wp::NodeData::TextPart(wp::TextPart{ text: String::from(line) })));
         let mut text_part = text_part_ref.borrow_mut();
+        text_part.page_first = page_number;
+        text_part.page_last = page_number;
 
         text_part.position = match text_part.text_settings.justify.unwrap_or(TextJustification::Start) {
             TextJustification::Start => position,

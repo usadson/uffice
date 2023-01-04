@@ -30,6 +30,13 @@ use crate::wp::numbering::NumberingManager;
 
 pub const SCROLL_BAR_WIDTH: f32 = 20.0;
 
+// The height from the top to the first page, and from the end of the
+// last page to the bottom.
+const VERTICAL_PAGE_MARGIN: f32 = 20.0;
+
+// The gaps between the pages.
+const VERTICAL_PAGE_GAP: f32 = 30.0;
+
 pub fn load_archive_file_to_string(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Option<Rc<String>> {
     match archive.by_name(name) {
         Ok(zip_document) => Some(Rc::new(std::io::read_to_string(zip_document)
@@ -121,7 +128,7 @@ impl Scroller {
     }
 
     pub fn scroll(&mut self, value: f32) {
-        self.value -= value / 10.0;
+        self.value -= value / 100.0;
 
         self.value = match self.value {
             d if d < 0.0 => 0.0,
@@ -175,6 +182,8 @@ pub struct Application {
     scale: f32,
     document_rect: Rect<f32>,
     document: Option<Rc<RefCell<wp::Node>>>,
+
+    page_textures: Vec<Rc<RefCell<RenderTexture>>>,
 }
 
 impl Application {
@@ -212,7 +221,27 @@ impl Application {
             scale: 0.0,
             document_rect: sfml::graphics::Rect::<f32>::new(0.0, 0.0, 0.0, 0.0),
             document: None,
+            page_textures: Vec::new(),
         }
+    }
+
+    /// Calculates the height of all the pages, plus some vertical margins and
+    /// gaps between the pages.
+    ///
+    /// This function is used so the scroller knows how much we're able to
+    /// scroll.
+    fn calculate_content_height(&self) -> f32 {
+        // Top and bottom gaps above and below the pages.
+        let mut height = VERTICAL_PAGE_MARGIN * 2.0;
+
+        // The gaps between the pages.
+        height += (self.page_textures.len() - 1) as f32 * VERTICAL_PAGE_GAP;
+
+        for page_tex in &self.page_textures {
+            height += page_tex.as_ref().borrow().size().y as f32;
+        }
+
+        height
     }
 
     pub fn check_interactable_for_mouse(&mut self, mouse_position: Vector2f, callback: &mut dyn FnMut(&mut wp::Node, Position)) {
@@ -234,8 +263,6 @@ impl Application {
     }
 
     pub fn run(&mut self) {
-        let mut texture = sfml::graphics::RenderTexture::new(1, 1).unwrap();
-
         let mut shape = sfml::graphics::RectangleShape::new();
         let mut left_button_pressed = false;
         let mut mouse_down = false;
@@ -340,24 +367,33 @@ impl Application {
             new_cursor = None;
 
             if self.is_draw_invalidated.swap(false, Ordering::Relaxed) {
-                let (new_texture, document) = draw_document(&self.archive_path);
-                texture = new_texture;
+                let (new_page_textures, document) = draw_document(&self.archive_path);
+                self.page_textures = new_page_textures.render_targets;
                 self.document = Some(document);
+
+                self.scroller.document_height = self.calculate_content_height();
             }
 
             self.window.clear(Color::BLACK);
-            {
+            let factor = 0.4;
+            let mut y = (VERTICAL_PAGE_MARGIN - self.scroller.document_height * self.scroller.value) * factor;
+            let mut page_number = 0;
+            for render_texture in &self.page_textures {
+                println!("Page {} is @ {} of {}", page_number, y, self.scroller.document_height * factor);
+
+                page_number += 1;
+
                 // I don't know rust well enough to be able to keep a Sprite
                 // around _and_ replace the texture.
                 //
                 // But since this code is not performance-critical I don't care
                 // atm.
 
+                let texture = render_texture.borrow();
                 let mut sprite = Sprite::with_texture(texture.texture());
 
                 let full_size = window_size.x as f32;
                 let page_size = sprite.texture_rect().width as f32;
-                let factor = 1.0 / 5.0 * 4.0;
 
                 self.scale = full_size * factor / page_size;
                 let centered_x = (full_size - page_size * self.scale) / 2.0;
@@ -365,10 +401,10 @@ impl Application {
 
                 sprite.set_position((
                     centered_x,
-                    20.0f32 - self.scroller.offset(sprite.texture_rect().height as f32)
+                    y
                 ));
 
-                self.scroller.document_height = sprite.global_bounds().height;
+                y += sprite.global_bounds().size().y + VERTICAL_PAGE_GAP * factor;
 
                 self.document_rect = sprite.global_bounds();
                 self.window.draw(&sprite);
