@@ -13,7 +13,6 @@ use std::{
 };
 
 use sfml::{
-    graphics::Color,
     system::Vector2f
 };
 
@@ -48,8 +47,6 @@ struct Context<'a> {
     #[allow(dead_code)]
     render_size: Vector2f,
 
-    // Page number, starting from 0!
-    current_page: usize,
     numbering_manager: wp::numbering::NumberingManager,
 }
 
@@ -143,7 +140,6 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
 
         render_size,
 
-        current_page: 0,
         numbering_manager,
     };
 
@@ -220,18 +216,18 @@ fn process_hyperlink_element(context: &mut Context,
                              line_layout: &mut wp::layout::LineLayout,
                              node: &xml::Node,
                              mut position: Vector2f) -> Vector2f {
-    for attr in node.attributes() {
+    //for attr in node.attributes() {
         // println!("│  │  ├─ A: \"{}\" => \"{}\"", attr.name(), attr.value());
-    }
+    //}
 
     let hyperlink_ref = wp::append_child(parent, wp::Node::new(wp::NodeData::Hyperlink(Default::default())));
 
     for child in node.children() {
         // println!("│  │  │  ├─ HC: {}", child.tag_name().name());
 
-        for attr in child.attributes() {
+        // for attr in child.attributes() {
             // println!("│  │  │  ├─   A: \"{}\" => \"{}\"", attr.name(), attr.value());
-        }
+        // }
 
         match child.tag_name().name() {
             // Text Run
@@ -266,12 +262,14 @@ fn process_pragraph_element(context: &mut Context,
                             original_position: Vector2f) -> Vector2f {
     let mut position = original_position;
 
-    let mut line_layout = wp::layout::LineLayout::new(&context.page_settings);
-
-    position.x = context.page_settings.margins.left as f32 * TWELFTEENTH_POINT;
-
     let paragraph = wp::append_child(parent, wp::Node::new(wp::NodeData::Paragraph(wp::Paragraph)));
-    paragraph.borrow_mut().position = position;
+
+    //position.x = context.page_settings.margins.left as f32 * TWELFTEENTH_POINT;
+    let mut line_layout = wp::layout::LineLayout::new(&context.page_settings, original_position.y);
+
+    paragraph.borrow_mut().position = line_layout.position_on_line;
+    position = line_layout.position_on_line;
+    //paragraph.borrow_mut().position = position;
 
     if let Some(first_child) = node.first_child() {
         // Paragraph Properties section 17.3.1.26
@@ -290,10 +288,21 @@ fn process_pragraph_element(context: &mut Context,
             let node = numbering.create_node(paragraph.clone(), &mut line_layout, &mut context.font_manager);
             position.x += node.as_ref().borrow().size.x;
             // println!("Numbering Width: {}", node.as_ref().borrow().size.x);
+
+
+
+            pub const NUMBERING_INDENTATION: f32 = 700.0 * TWELFTEENTH_POINT;
+
+            let text_settings = &paragraph.as_ref().borrow().text_settings;
+            if text_settings.indentation_left.is_some() {
+                position.x = text_settings.indent_one(position.x, true);
+            } else {
+                position.x = (position.x / NUMBERING_INDENTATION + 1.0).floor() * NUMBERING_INDENTATION;
+            }
         }
     }
 
-    position.x = paragraph.as_ref().borrow().text_settings.indent_one(position.x, true);
+
 
     for child in node.children() {
         // println!("│  ├─ {}", child.tag_name().name());
@@ -611,6 +620,8 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
         let mut width = text.local_bounds().width;
 
         let max_width_fitting_on_page = line_layout.page_horizontal_end - position.x;
+        println!("path \"{}\" x={} w={} max_on_page={} previous_stop={:?}", line, position.x, width, max_width_fitting_on_page, previous_stop_reason);
+
         if max_width_fitting_on_page < 0.0 || previous_stop_reason.is_some() {
             position.y += text.global_bounds().height + text.line_spacing() * LINE_SPACING;
 
@@ -631,7 +642,7 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
         let stop_reason;
 
         //#[cfg(feature = "debug-text-layout")]
-        // println!("width({}) < max_width_fitting_on_page({}) \"{}\"", width, max_width_fitting_on_page, line);
+        println!("width({}) < max_width_fitting_on_page({}) \"{}\"", width, max_width_fitting_on_page, line);
 
         if let Some((next_index, next_word)) = iter.peek() {
             let line_with_next = &text_string[start..(next_index + next_word.bytes().count())];
@@ -656,22 +667,25 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
                     start_index = Some(index);
                 }
             }
+
+            println!("   stop_reason={:?} start_index={:?}", stop_reason, start_index);
         } else {
             stop_reason = LineStopReason::EndReached;
         }
 
         previous_word_pair = None;
 
-        #[cfg(feature = "debug-text-layout")]
+        //#[cfg(feature = "debug-text-layout")]
         {
-            // println!("│  │  │  │  ├─ Line: \"{}\", stop_reason={:?}", line, stop_reason);
-            // println!("│  │  │  │  ├─ Calculation: x={} w={} m={}", position.x, width, max_width_fitting_on_page);
+            println!("│  │  │  │  ├─ Line: \"{}\", stop_reason={:?}", line, stop_reason);
+            println!("│  │  │  │  ├─ Calculation: x={} w={} m={}", position.x, width, max_width_fitting_on_page);
         }
 
         let text_part_ref = wp::append_child(parent.clone(), wp::Node::new(wp::NodeData::TextPart(wp::TextPart{ text: String::from(line) })));
         let mut text_part = text_part_ref.borrow_mut();
         text_part.page_first = page_number;
         text_part.page_last = page_number;
+        text_part.size = text.local_bounds().size();
 
         text_part.position = match text_part.text_settings.justify.unwrap_or(TextJustification::Start) {
             TextJustification::Start => position,
@@ -684,6 +698,7 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
 
         //paint_text(context, text, text_settings);
         line_layout.add_line_height_candidate(text.global_bounds().height);
+        line_layout.position_on_line.x += width;
 
         position.x += width;
 
