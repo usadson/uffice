@@ -42,6 +42,11 @@ const VERTICAL_PAGE_GAP: f32 = 30.0;
 // The background color of the application. This is the color under the pages.
 const APPLICATION_BACKGROUND_COLOR: Color = Color::rgb(29, 28, 33);
 
+/// The zoom levels the user can step through using control + or control -.
+const ZOOM_LEVELS: [f32; 19] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.2, 1.33, 1.5, 1.7, 2.0, 2.5, 3.0, 4.0, 5.0];
+
+const DEFAULT_ZOOM_LEVEL_INDEX: usize = 4;
+
 pub fn load_archive_file_to_string(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Option<Rc<String>> {
     match archive.by_name(name) {
         Ok(zip_document) => Some(Rc::new(std::io::read_to_string(zip_document)
@@ -219,6 +224,11 @@ pub struct Application {
     document_rect: Rect<f32>,
     document: Option<Rc<RefCell<wp::Node>>>,
 
+    zoom_index: usize,
+
+    /// This defines how zoomed in or out the pages are.
+    zoom_level: f32,
+
     page_textures: Vec<Rc<RefCell<RenderTexture>>>,
 }
 
@@ -257,6 +267,9 @@ impl Application {
             scale: 0.0,
             document_rect: sfml::graphics::Rect::<f32>::new(0.0, 0.0, 0.0, 0.0),
             document: None,
+
+            zoom_index: DEFAULT_ZOOM_LEVEL_INDEX,
+            zoom_level: ZOOM_LEVELS[DEFAULT_ZOOM_LEVEL_INDEX],
             page_textures: Vec::new(),
         }
     }
@@ -361,6 +374,10 @@ impl Application {
                                 )
                             ).deref());
                         }
+                        Event::KeyPressed { code, alt, ctrl, shift, system } =>
+                            self.on_key_pressed(code, alt, ctrl, shift, system),
+                        Event::KeyReleased { code, alt, ctrl, shift, system } =>
+                            self.on_key_released(code, alt, ctrl, shift, system),
                         Event::MouseWheelScrolled { wheel, delta, x: _, y: _ } => {
                             if wheel == sfml::window::mouse::Wheel::VerticalWheel {
                                 self.scroller.scroll(delta);
@@ -448,8 +465,7 @@ impl Application {
             }
 
             self.window.clear(APPLICATION_BACKGROUND_COLOR);
-            let factor = 0.4;
-            let mut y = (VERTICAL_PAGE_MARGIN - self.scroller.document_height * self.scroller.value) * factor;
+            let mut y = (VERTICAL_PAGE_MARGIN - self.scroller.document_height * self.scroller.value) * self.zoom_level;
 
             for render_texture in &self.page_textures {
                 // I don't know rust well enough to be able to keep a Sprite
@@ -464,7 +480,7 @@ impl Application {
                 let full_size = window_size.x as f32;
                 let page_size = sprite.texture_rect().width as f32;
 
-                self.scale = full_size * factor / page_size;
+                self.scale = full_size * self.zoom_level / page_size;
                 let centered_x = (full_size - page_size * self.scale) / 2.0;
                 sprite.set_scale((self.scale, self.scale));
 
@@ -475,7 +491,7 @@ impl Application {
 
                 sprite.set_color(Color::rgba(255, 255, 255, (255.0 * page_introduction_animator.update()) as u8));
 
-                y += sprite.global_bounds().size().y + VERTICAL_PAGE_GAP * factor;
+                y += sprite.global_bounds().size().y + VERTICAL_PAGE_GAP * self.zoom_level;
 
                 self.document_rect = sprite.global_bounds();
                 self.window.draw(&sprite);
@@ -488,5 +504,37 @@ impl Application {
         }
 
         self.window.close();
+    }
+
+    fn on_key_pressed(&self, _code: Key, _alt: bool, _ctrl: bool, _shift: bool, _system: bool) {
+
+    }
+
+    fn on_key_released(&mut self, code: Key, _alt: bool, ctrl: bool, _shift: bool, _system: bool) {
+        // Control +
+        if ctrl && code == Key::Equal {
+            self.increase_zoom_level();
+        }
+
+        // Control -
+        if ctrl && code == Key::Hyphen {
+            self.decrease_zoom_level();
+        }
+    }
+
+    fn increase_zoom_level(&mut self) {
+        let next_zoom_index = self.zoom_index + 1;
+        if next_zoom_index < ZOOM_LEVELS.len() {
+            self.zoom_index = next_zoom_index;
+            self.zoom_level = ZOOM_LEVELS[next_zoom_index];
+        }
+    }
+
+    fn decrease_zoom_level(&mut self) {
+        if self.zoom_index != 0 {
+            let next_zoom_index = self.zoom_index - 1;
+            self.zoom_index = next_zoom_index;
+            self.zoom_level = ZOOM_LEVELS[next_zoom_index];
+        }
     }
 }
