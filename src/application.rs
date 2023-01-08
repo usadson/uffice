@@ -7,6 +7,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 use std::time::Instant;
 
 use font_kit::family_name::FamilyName;
@@ -46,6 +47,15 @@ const APPLICATION_BACKGROUND_COLOR: Color = Color::rgb(29, 28, 33);
 const ZOOM_LEVELS: [f32; 19] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.2, 1.33, 1.5, 1.7, 2.0, 2.5, 3.0, 4.0, 5.0];
 
 const DEFAULT_ZOOM_LEVEL_INDEX: usize = 4;
+
+/// After how much time should a tooltip be shown (if applicable).
+///
+/// The following is used as a recommendation:
+///     https://ux.stackexchange.com/a/360
+const TOOLTIP_TIMEOUT: Duration = Duration::from_millis(500);
+
+const TOOLTIP_BACKGROUND_COLOR: Color = Color::rgb(211, 211, 211);
+const TOOLTIP_BORDER_COLOR: Color = Color::rgb(168, 168, 168);
 
 pub fn load_archive_file_to_string(archive: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Option<Rc<String>> {
     match archive.by_name(name) {
@@ -208,7 +218,19 @@ impl Animator {
     }
 }
 
-pub struct Application {
+enum TooltipState {
+    /// The mouse was moved but the timeout didn't expire yet.
+    Unchecked,
+
+    /// The tooltip is visible.
+    Visible,
+
+    /// The mouse hasn't moved after the timeout but there is no text to
+    /// display.
+    NotApplicable,
+}
+
+pub struct Application<'a> {
     archive_path: String,
 
     #[allow(dead_code)]
@@ -216,6 +238,8 @@ pub struct Application {
 
     window: RenderWindow,
     cursor: SfBox<Cursor>,
+
+    interface_font: SfBox<Font>,
 
     is_draw_invalidated: Arc<AtomicBool>,
     scroller: Scroller,
@@ -230,9 +254,35 @@ pub struct Application {
     zoom_level: f32,
 
     page_textures: Vec<Rc<RefCell<RenderTexture>>>,
+
+    mouse_position: Vector2f,
+    last_mouse_move: Instant,
+    tooltip_state: TooltipState,
+    tooltip_text: String,
+
+    rectangle_shape: RectangleShape<'a>,
 }
 
-impl Application {
+fn load_interface_font() -> Option<SfBox<Font>> {
+    let font_source = font_kit::source::SystemSource::new();
+    let font_handle = font_source.select_best_match(&[
+        FamilyName::Title(String::from("Segoe UI")),
+        FamilyName::Title(String::from("Noto Sans")),
+        FamilyName::SansSerif
+    ], &font_kit::properties::Properties::new())
+        .expect("Failed to find a system font!");
+
+    match &font_handle {
+        font_kit::handle::Handle::Memory { bytes, font_index: _ } => unsafe {
+            Font::from_memory(&bytes.as_ref())
+        }
+        font_kit::handle::Handle::Path { path, font_index: _ } => {
+            Font::from_file(path.to_str().unwrap())
+        }
+    }
+}
+
+impl<'a> Application<'a> {
     pub fn new(archive_path: String) -> Self {
         let is_draw_invalidated = Arc::new(AtomicBool::new(true));
         let notify_flag = is_draw_invalidated.clone();
@@ -262,6 +312,9 @@ impl Application {
             watcher,
             window,
             cursor: Cursor::from_system(CursorType::Arrow).unwrap(),
+
+            interface_font: load_interface_font().unwrap(),
+
             is_draw_invalidated,
             scroller: Scroller::new(),
             scale: 0.0,
@@ -271,6 +324,13 @@ impl Application {
             zoom_index: DEFAULT_ZOOM_LEVEL_INDEX,
             zoom_level: ZOOM_LEVELS[DEFAULT_ZOOM_LEVEL_INDEX],
             page_textures: Vec::new(),
+
+            mouse_position: Vector2f::new(0.0, 0.0),
+            last_mouse_move: Instant::now(),
+            tooltip_state: TooltipState::NotApplicable,
+            tooltip_text: String::new(),
+
+            rectangle_shape: RectangleShape::new(),
         }
     }
 
@@ -309,32 +369,13 @@ impl Application {
 
         document.hit_test(mouse_position, &mut |node| {
             callback(node, mouse_position);
-        });
+        })
     }
 
     fn display_loading_screen(&mut self) {
         self.window.clear(APPLICATION_BACKGROUND_COLOR);
 
-        let font_source = font_kit::source::SystemSource::new();
-        let font_handle = font_source.select_best_match(&[
-            FamilyName::Title(String::from("Segoe UI")),
-            FamilyName::Title(String::from("Noto Sans")),
-            FamilyName::SansSerif
-        ], &font_kit::properties::Properties::new())
-            .expect("Failed to find a system font!");
-
-        let font;
-        match &font_handle {
-            font_kit::handle::Handle::Memory { bytes, font_index } => unsafe {
-                font = Font::from_memory(&bytes.as_ref());
-            }
-            font_kit::handle::Handle::Path { path, font_index } => {
-                font = Font::from_file(path.to_str().unwrap());
-            }
-        }
-        let font = font.unwrap();
-
-        let mut text = sfml::graphics::Text::new(&format!("Loading {}", &self.archive_path), &font, 36);
+        let mut text = sfml::graphics::Text::new(&format!("Loading {}", &self.archive_path), &self.interface_font, 36);
         text.set_position((
             (self.window.size().x as f32 - text.local_bounds().width) / 2.0,
             (self.window.size().y as f32 - text.local_bounds().height) / 2.0
@@ -418,10 +459,12 @@ impl Application {
                             mouse_position = Vector2f::new(x as f32, y as f32);
                             new_cursor = Some(CursorType::Arrow);
 
+                            self.reset_tooltip(mouse_position);
+
                             if let Some(document) = &mut self.document {
-                                document.borrow_mut().apply_recursively(&mut |node| {
+                                document.borrow_mut().apply_recursively(&mut |node, _depth| {
                                     node.interaction_states.hover = wp::HoverState::NotHoveringOn;
-                                });
+                                }, 0);
 
                                 self.check_interactable_for_mouse(mouse_position, &mut |node, position| {
                                     node.interaction_states.hover = wp::HoverState::HoveringOver;
@@ -498,6 +541,8 @@ impl Application {
                 self.window.draw(&sprite);
             }
 
+            self.draw_tooltip();
+
             // Scrollbar
             self.scroller.draw(&mut shape, &mut self.window);
 
@@ -558,5 +603,81 @@ impl Application {
             self.zoom_index = next_zoom_index;
             self.zoom_level = ZOOM_LEVELS[next_zoom_index];
         }
+    }
+
+    fn draw_tooltip(&mut self) {
+        let now = Instant::now();
+
+        match self.tooltip_state {
+            TooltipState::Unchecked => {
+                if now.duration_since(self.last_mouse_move) > TOOLTIP_TIMEOUT {
+                    let mut tooltip_text = None;
+                    let was_hit = self.check_interactable_for_mouse(self.mouse_position, &mut |node, _mouse_position| {
+                        match &node.data {
+                            wp::NodeData::Hyperlink(link) => {
+                                if let Some(url) = link.get_url() {
+                                    tooltip_text = Some(url);
+                                }
+                            }
+                            _ => ()
+                        }
+                    });
+
+                    if !was_hit || tooltip_text.is_none() {
+                        self.tooltip_state = TooltipState::NotApplicable;
+                        println!("Didn't hit anything @ {:?}", self.mouse_position);
+                        return;
+                    }
+
+                    self.tooltip_state = TooltipState::Visible;
+                    self.tooltip_text = tooltip_text.unwrap();
+                }
+            }
+            TooltipState::NotApplicable => return,
+            TooltipState::Visible => ()
+        }
+
+        if self.tooltip_text.is_empty() {
+            return;
+        }
+
+        let mut text = Text::new(&self.tooltip_text, &self.interface_font, 18);
+        let text_size = text.global_bounds().size();
+
+        const TOOLTIP_PADDING: f32 = 2.0;
+        const TOOLTIP_BORDER: f32 = 2.0;
+
+        self.rectangle_shape.set_size(Vector2f::new(
+            text_size.x + TOOLTIP_PADDING * 2.0,
+            text_size.y + TOOLTIP_PADDING * 2.0
+        ));
+
+        self.rectangle_shape.set_outline_thickness(TOOLTIP_BORDER);
+        self.rectangle_shape.set_outline_color(TOOLTIP_BORDER_COLOR);
+        self.rectangle_shape.set_fill_color(TOOLTIP_BACKGROUND_COLOR);
+
+        let rectangle_size = self.rectangle_shape.global_bounds().size();
+        self.rectangle_shape.set_position(Vector2f::new(
+            self.mouse_position.x,
+            self.mouse_position.y - rectangle_size.y
+        ));
+
+        self.window.draw(&self.rectangle_shape);
+
+        text.set_fill_color(Color::BLACK);
+
+        text.set_position(Vector2f::new(
+            self.rectangle_shape.position().x + TOOLTIP_PADDING,
+            self.rectangle_shape.position().y,
+        ));
+
+        self.window.draw(&text);
+    }
+
+    fn reset_tooltip(&mut self, mouse_position: Vector2f) {
+        self.mouse_position = mouse_position;
+        self.tooltip_state = TooltipState::Unchecked;
+        self.last_mouse_move = Instant::now();
+        self.tooltip_text = String::new();
     }
 }

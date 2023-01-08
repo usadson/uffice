@@ -293,6 +293,14 @@ impl Hyperlink {
         }
     }
 
+    pub fn get_url(&self) -> Option<String> {
+        if let Some(relationship) = &self.relationship {
+            return Some(relationship.borrow().target.clone());
+        }
+
+        None
+    }
+
     #[cfg(target_os = "windows")]
     pub fn open_browser(&self, url: &url::Url) {
         use std::process::Command;
