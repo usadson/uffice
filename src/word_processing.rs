@@ -682,6 +682,8 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
             TextJustification::End => Vector2f::new(line_layout.page_horizontal_end - width, position.y)
         };
 
+        text_part.size = text.local_bounds().size();
+
         //paint_text(context, text, text_settings);
         line_layout.add_line_height_candidate(text.global_bounds().height);
 
