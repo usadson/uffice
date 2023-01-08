@@ -59,12 +59,25 @@ impl RelationshipType {
     }
 }
 
-#[derive(Debug)]
 pub struct Relationship {
     pub id: Rc<str>,
     pub relation_type: RelationshipType,
     pub target: String,
     pub data: Vec<u8>,
+}
+
+impl core::fmt::Debug for Relationship {
+
+    /// Custom formatter to avoid dumping the data property.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Relationship")
+            .field("id", &self.id)
+            .field("relation_type", &self.relation_type)
+            .field("target", &self.target)
+            .field("data_length", &self.data.len())
+            .finish()
+    }
+
 }
 
 pub struct Relationships {

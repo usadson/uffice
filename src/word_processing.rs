@@ -188,6 +188,10 @@ fn process_drawing_element(context: &mut Context, parent: Rc<RefCell<Node>>,
 
                 let inline_drawing = wp::create_child(parent.clone(), wp::NodeData::Drawing(drawing_object));
                 inline_drawing.borrow_mut().size = size;
+
+                let mut parent = parent.borrow_mut();
+                assert_eq!(parent.size, Vector2f::new(0.0, 0.0));
+                parent.size = size;
             }
 
             _ => ()

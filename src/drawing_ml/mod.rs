@@ -159,7 +159,6 @@ impl PictureFill {
     }
 }
 
-#[derive(Debug)]
 pub struct Blip {
     embedded: Option<Rc<RefCell<Relationship>>>,
     image: Option<sfml::graphics::Image>,
@@ -190,5 +189,29 @@ impl Blip {
         }
 
         blip
+    }
+}
+
+impl core::fmt::Debug for Blip {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        /// To avoid dumping all the pixels, we use a fake object.
+        #[derive(Debug)]
+        struct Image {
+            width: u32,
+            height: u32
+        }
+
+        let image = match &self.image {
+            Some(image) => Some(Image {
+                width: image.size().x,
+                height: image.size().y,
+            }),
+            None => None,
+        };
+
+        f.debug_struct("Blip")
+            .field("embedded", &self.embedded)
+            .field("image", &image)
+            .finish()
     }
 }
