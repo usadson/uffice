@@ -103,12 +103,12 @@ impl Node {
     }
 
     /// Run the `callback` function recursively on itself and it's descendants.
-    pub fn apply_recursively(&mut self, callback: &dyn Fn(&mut Node)) {
-        callback(self);
+    pub fn apply_recursively(&mut self, callback: &dyn Fn(&mut Node, usize), depth: usize) {
+        callback(self, depth);
 
         if let Some(children) = &mut self.children {
             for child in children {
-                callback(&mut child.borrow_mut());
+                child.borrow_mut().apply_recursively(callback, depth + 1);
             }
         }
     }

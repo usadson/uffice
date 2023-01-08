@@ -293,9 +293,10 @@ impl Application {
         height
     }
 
-    pub fn check_interactable_for_mouse(&mut self, mouse_position: Vector2f, callback: &mut dyn FnMut(&mut wp::Node, Position)) {
+    pub fn check_interactable_for_mouse(&mut self, mouse_position: Vector2f, callback: &mut dyn FnMut(&mut wp::Node, Position))
+            -> bool {
         if !self.document_rect.contains(mouse_position) {
-            return;
+            return false;
         }
 
         let mouse_position = Position::new(
@@ -519,6 +520,27 @@ impl Application {
         // Control -
         if ctrl && code == Key::Hyphen {
             self.decrease_zoom_level();
+        }
+
+        match code {
+            Key::F2 => self.dump_dom_tree(),
+
+            _ => ()
+        }
+    }
+
+    fn dump_dom_tree(&self) {
+        match &self.document {
+            Some(document) => {
+                document.borrow_mut().apply_recursively(&|node, depth| {
+                    print!("🌲: {}{:?}", "    ".repeat(depth), node.data);
+                    print!(" @ ({}, {})", node.position.x, node.position.y,);
+                    print!(" sized ({}x{})", node.size.x, node.size.y);
+
+                    println!();
+                }, 0);
+            }
+            None => println!("🌲: No tree"),
         }
     }
 
