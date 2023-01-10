@@ -1,9 +1,8 @@
 // Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::{rc::Rc, cell::RefCell, any::type_name};
+use std::{rc::Rc, cell::RefCell};
 
-use font_kit::family_name::FamilyName;
 use roxmltree as xml;
 use sfml::{graphics::{Color, TextStyle, Font, Text}, system::Vector2f};
 
@@ -299,7 +298,7 @@ impl TextSettings {
         }
     }
 
-    pub(crate) fn indent_one(&self, x: f32, is_first_line: bool) -> f32 {
+    pub(crate) fn indent_one(&self, x: f32, _is_first_line: bool) -> f32 {
         //println!("indent_one");
         //println!("  In X: {}", x);
 

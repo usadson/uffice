@@ -1,7 +1,7 @@
 // Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::{rc::Rc, borrow::BorrowMut, cell::RefCell};
+use std::{rc::Rc, cell::RefCell};
 
 use sfml::{graphics::{RenderTarget, RectangleShape, Color, Transformable, Shape, RenderTexture}, system::Vector2f};
 

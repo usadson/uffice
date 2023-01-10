@@ -14,7 +14,7 @@ fn main() {
     }).expect("Failed to instantiate file watcher");
 
     let path = std::path::Path::new("C:\\");
-    
+
     println!("{:?} => {:?}", path, path.canonicalize());
 
     if let Ok(md) = path.metadata() {
@@ -24,8 +24,10 @@ fn main() {
     match watcher.watch(path, notify::RecursiveMode::Recursive) {
         Err(err) => {
             println!("{:?}", err);
-            return;
         }
-        _ => loop {}
+        _ => {
+            #[allow(clippy::empty_loop)]
+            loop {}
+        }
     }
 }

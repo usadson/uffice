@@ -197,7 +197,10 @@ impl core::fmt::Debug for Blip {
         /// To avoid dumping all the pixels, we use a fake object.
         #[derive(Debug)]
         struct Image {
+            #[allow(dead_code)]
             width: u32,
+
+            #[allow(dead_code)]
             height: u32
         }
 

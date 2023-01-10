@@ -7,7 +7,6 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use std::{
     path::Path,
-    process::exit,
     cell::{RefCell, RefMut},
     rc::Rc,
 };
@@ -45,8 +44,6 @@ struct Context<'a> {
     #[allow(dead_code)]
     render_size: Vector2f,
 
-    // Page number, starting from 0!
-    current_page: usize,
     numbering_manager: wp::numbering::NumberingManager,
 }
 
@@ -140,7 +137,6 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
 
         render_size,
 
-        current_page: 0,
         numbering_manager,
     };
 
@@ -221,26 +217,12 @@ fn process_hyperlink_element(context: &mut Context,
                              line_layout: &mut wp::layout::LineLayout,
                              node: &xml::Node,
                              mut position: Vector2f) -> Vector2f {
-    for attr in node.attributes() {
-        // println!("│  │  ├─ A: \"{}\" => \"{}\"", attr.name(), attr.value());
-    }
-
     let hyperlink_ref = wp::append_child(parent, wp::Node::new(wp::NodeData::Hyperlink(Default::default())));
 
     for child in node.children() {
-        // println!("│  │  │  ├─ HC: {}", child.tag_name().name());
-
-        for attr in child.attributes() {
-            // println!("│  │  │  ├─   A: \"{}\" => \"{}\"", attr.name(), attr.value());
-        }
-
-        match child.tag_name().name() {
-            // Text Run
-            "r" => {
-                position = process_text_run_element(context, hyperlink_ref.clone(), line_layout, &child, position);
-            }
-
-            _ => ()
+        // Text Run
+        if child.tag_name().name() == "r" {
+            position = process_text_run_element(context, hyperlink_ref.clone(), line_layout, &child, position);
         }
     }
 
@@ -351,21 +333,6 @@ fn process_pragraph_element(context: &mut Context,
 pub fn process_paragraph_properties_element(numbering_manager: &numbering::NumberingManager, style_manager: &StyleManager,
                                             paragraph_text_settings: &mut text_settings::TextSettings, node: &xml::Node) {
     for property in node.children() {
-        // println!("│  │  ├─ {}", property.tag_name().name());
-        for attr in property.attributes() {
-            // println!("│  │  │  ├─ Attribute: {} = {}", attr.name(), attr.value());
-        }
-
-        for sub_property in property.children() {
-            // println!("│  │  │  ├─ {}", sub_property.tag_name().name());
-            for attr in sub_property.attributes() {
-                // println!("│  │  │  │  ├─ A: {} = {}", attr.name(), attr.value());
-            }
-            for sub_property2 in sub_property.children() {
-                // println!("│  │  │  │  ├─ P: {}", sub_property2.tag_name().name());
-            }
-        }
-
         match property.tag_name().name() {
             "ind" => paragraph_text_settings.parse_element_ind(&property),
 
@@ -434,11 +401,6 @@ fn process_numbering_definition_instance_reference_property(numbering_manager: &
     };
 
     for child in node.children() {
-        // println!("│  │  │  ├─ {}", child.tag_name().name());
-        for attr in child.attributes() {
-            // println!("│  │  │  │  ├─ Attribute: {} = {}", attr.name(), attr.value());
-        }
-
         match child.tag_name().name() {
             // 17.9.3 ilvl (Numbering Level Reference)
             "ilvl" => {
@@ -477,8 +439,9 @@ fn process_sdt_built_in_doc_part(context: &mut Context, parent: Rc<RefCell<Node>
     }
 }
 
+/// Process the w:docPartGallery
 fn process_sdt_document_part_gallery_filter(_context: &mut Context, _parent: Rc<RefCell<Node>>, node: &xml::Node) {
-    for attr in node.attributes() {
+    for _attr in node.attributes() {
         // println!("│  │  │  │  ├─ Attribute \"{}\" => \"{}\"   in namespace \"{}\"", attr.name(), attr.value(), attr.namespace().unwrap_or(""));
     }
 }
@@ -497,7 +460,7 @@ fn process_std_properties(context: &mut Context, parent: Rc<RefCell<Node>>, node
 
 /// Process the <w:sdtEndPr> element
 fn process_sdt_end_character_properties(_context: &mut Context, _parent: Rc<RefCell<Node>>, node: &xml::Node) {
-    for child in node.children() {
+    for _child in node.children() {
         // println!("│  │  ├─ {}", child.tag_name().name());
     }
 }
@@ -738,12 +701,6 @@ fn process_text_run_element(context: &mut Context,
     let text_run = wp::append_child(parent, wp::Node::new(wp::NodeData::TextRun(Default::default())));
 
     for text_run_property in node.children() {
-        // println!("│  │  ├─ {}", text_run_property.tag_name().name());
-
-        for attr in text_run_property.attributes() {
-            // println!("│  │  │  ├─ Attribute \"{}\" → \"{}\"", attr.name(), attr.value());
-        }
-
         match text_run_property.tag_name().name() {
             "drawing" => {
                 position = process_drawing_element(context, text_run.clone(), &text_run_property, position);
@@ -780,29 +737,18 @@ fn resolve_font_sources() -> Vec<Box<(dyn font_kit::source::Source + 'static)>> 
 
     #[cfg(target_os = "windows")]
     {
-        //let d = windows::Storage::
-
         let str = format!("{}\\Microsoft\\FontCache\\4\\CloudFonts", env!("LOCALAPPDATA"));
-        // println!("Path: {:?}", str);
 
         match Path::new(&str).canonicalize() {
             Ok(path) => {
-                // println!("[ResolveFontSources] Canonical: {:?}", path);
                 sources.push(path);
             }
             Err(e) => {
-                // println!("[ResolveFontSources] Failed to locate Windows FontCache \"{}\": {:?}", str, e);
-
-                exit(0)
+                println!("[ResolveFontSources] Failed to locate Windows FontCache \"{}\": {:?}", str, e);
+                std::process::exit(0)
             }
         }
-
-
-        // font_sources.push(Box::new(
-
-        // ));
     }
-
 
     vec![
         Box::new(font_kit::source::SystemSource::new()),

@@ -178,10 +178,8 @@ impl FontManager {
             if let Some(font) = &entry.variant_bold {
                 return font.clone();
             }
-        } else {
-            if let Some(font) = &entry.variant_normal {
-                return font.clone();
-            }
+        } else if let Some(font) = &entry.variant_normal {
+            return font.clone();
         }
 
         let family_names = [FamilyName::Title(String::from(font))];
