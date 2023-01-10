@@ -1,6 +1,7 @@
 // Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+pub mod instructions;
 pub mod layout;
 pub mod numbering;
 pub mod painter;
@@ -39,7 +40,7 @@ pub enum NodeData {
     StructuredDocumentTag(StructuredDocumentTag),
     Text(),
     TextPart(TextPart),
-    TextRun(),
+    TextRun(TextRun),
 }
 
 #[derive(Debug)]
@@ -263,6 +264,11 @@ impl TextPart {
             _ => ()
         }
     }
+}
+
+#[derive(Debug, Default)]
+pub struct TextRun {
+    pub instruction: Option<crate::wp::instructions::Field>,
 }
 
 #[derive(Debug)]

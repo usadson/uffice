@@ -12,6 +12,7 @@ version = "0.1.0"
 
 [dependencies]
 bytemuck = "*"
+chrono = "*"
 const_format = "*"
 dotenv = "*"
 font-kit = "*"

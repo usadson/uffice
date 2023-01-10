@@ -12,10 +12,7 @@ use std::{
     rc::Rc,
 };
 
-use sfml::{
-    graphics::Color,
-    system::Vector2f
-};
+use sfml::system::Vector2f;
 
 use crate::{
     *,
@@ -552,7 +549,29 @@ fn process_text_element(context: &mut Context,
                         position: Vector2f) -> Vector2f {
     let mut position = position;
 
-    let text_node = wp::append_child(parent, wp::Node::new(wp::NodeData::Text()));
+    let instruction = (|| {
+        let text_run_borrow = parent.as_ref().borrow();
+        let parent = text_run_borrow.parent.upgrade().unwrap();
+        let parent_borrow = parent.as_ref().borrow();
+
+        for child in parent_borrow.children.as_ref().unwrap() {
+            let child = child.as_ref().borrow();
+            match &child.data {
+                crate::wp::NodeData::TextRun(run) => if let Some(instruction) = &run.instruction {
+                    return Some(instruction.clone());
+                }
+                _ => ()
+            }
+        }
+
+        None
+    })();
+
+    if let Some(field) = instruction {
+        return process_text_element_in_instructed_field(context, parent, line_layout, position, &field);
+    }
+
+    let text_node = wp::append_child(parent.clone(), wp::Node::new(wp::NodeData::Text()));
 
     for child in node.children() {
         if child.node_type() == xml::NodeType::Text {
@@ -568,6 +587,12 @@ fn process_text_element(context: &mut Context,
     }
 
     position
+}
+
+fn process_text_element_in_instructed_field(context: &mut Context,
+        parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout,
+        _position: Vector2f, field: &wp::instructions::Field) -> Vector2f {
+    append_text_element(&field.resolve_to_string(), parent, line_layout, &mut context.font_manager)
 }
 
 pub fn append_text_element(text_string: &str, parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, font_manager: &mut FontManager) -> Vector2f {
@@ -710,7 +735,7 @@ fn process_text_run_element(context: &mut Context,
                             position: Vector2f) -> Vector2f {
     let mut position = position;
 
-    let text_run = wp::append_child(parent, wp::Node::new(wp::NodeData::TextRun()));
+    let text_run = wp::append_child(parent, wp::Node::new(wp::NodeData::TextRun(Default::default())));
 
     for text_run_property in node.children() {
         // println!("│  │  ├─ {}", text_run_property.tag_name().name());
@@ -722,6 +747,17 @@ fn process_text_run_element(context: &mut Context,
         match text_run_property.tag_name().name() {
             "drawing" => {
                 position = process_drawing_element(context, text_run.clone(), &text_run_property, position);
+            }
+
+            "instrText" => {
+                if let crate::wp::NodeData::TextRun(run) = &mut text_run.borrow_mut().data {
+                    for child in node.children() {
+                        if let Some(text) = child.text() {
+                            run.instruction = Some(crate::wp::instructions::Field::parse(text));
+                            break;
+                        }
+                    }
+                }
             }
 
             "rPr" =>  {
