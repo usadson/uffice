@@ -1,6 +1,7 @@
 // Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+pub mod instructions;
 pub mod layout;
 pub mod numbering;
 pub mod painter;
@@ -39,7 +40,7 @@ pub enum NodeData {
     StructuredDocumentTag(StructuredDocumentTag),
     Text(),
     TextPart(TextPart),
-    TextRun(),
+    TextRun(TextRun),
 }
 
 #[derive(Debug)]
@@ -103,12 +104,12 @@ impl Node {
     }
 
     /// Run the `callback` function recursively on itself and it's descendants.
-    pub fn apply_recursively(&mut self, callback: &dyn Fn(&mut Node)) {
-        callback(self);
+    pub fn apply_recursively(&mut self, callback: &dyn Fn(&mut Node, usize), depth: usize) {
+        callback(self, depth);
 
         if let Some(children) = &mut self.children {
             for child in children {
-                callback(&mut child.borrow_mut());
+                child.borrow_mut().apply_recursively(callback, depth + 1);
             }
         }
     }
@@ -265,6 +266,11 @@ impl TextPart {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct TextRun {
+    pub instruction: Option<crate::wp::instructions::Field>,
+}
+
 #[derive(Debug)]
 pub struct Hyperlink {
     pub relationship: Option<Rc<RefCell<Relationship>>>,
@@ -291,6 +297,14 @@ impl Hyperlink {
 
             _ => ()
         }
+    }
+
+    pub fn get_url(&self) -> Option<String> {
+        if let Some(relationship) = &self.relationship {
+            return Some(relationship.borrow().target.clone());
+        }
+
+        None
     }
 
     #[cfg(target_os = "windows")]
