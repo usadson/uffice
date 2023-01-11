@@ -96,7 +96,8 @@ pub type DocumentResult = (wp::painter::PageRenderTargets, Rc<RefCell<Node>>);
 
 pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
                         document_relationships: &Relationships,
-                        numbering_manager: wp::numbering::NumberingManager) -> DocumentResult {
+                        numbering_manager: wp::numbering::NumberingManager,
+                        document_properties: wp::document_properties::DocumentProperties) -> DocumentResult {
     let text_settings = style_manager.default_text_settings();
     //text_settings.font = Some(String::from("Calibri"));
 
@@ -123,7 +124,8 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
         RefCell::new(
             Document::new(
                 text_settings.clone(),
-                page_settings.clone()
+                page_settings.clone(),
+                document_properties
             )
         )
     );
@@ -602,7 +604,7 @@ fn process_text_element(context: &mut Context,
 fn process_text_element_in_instructed_field(context: &mut Context,
         parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout,
         _position: Vector2f, field: &wp::instructions::Field) -> Vector2f {
-    append_text_element(&field.resolve_to_string(), parent, line_layout, &mut context.font_manager)
+    append_text_element(&field.resolve_to_string(&parent), parent, line_layout, &mut context.font_manager)
 }
 
 pub fn append_text_element(text_string: &str, parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, font_manager: &mut FontManager) -> Vector2f {

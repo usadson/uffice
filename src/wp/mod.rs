@@ -1,6 +1,7 @@
 // Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+pub mod document_properties;
 pub mod instructions;
 pub mod layout;
 pub mod numbering;
@@ -41,6 +42,16 @@ pub enum NodeData {
     Text(),
     TextPart(TextPart),
     TextRun(TextRun),
+}
+
+impl NodeData {
+    pub fn is_document(&self) -> bool {
+        if let NodeData::Document(..) = &self {
+            return true;
+        }
+
+        false
+    }
 }
 
 #[derive(Debug)]
@@ -112,6 +123,25 @@ impl Node {
                 child.borrow_mut().apply_recursively(callback, depth + 1);
             }
         }
+    }
+
+    pub fn find_document(&self) -> Rc<RefCell<Node>> {
+        if let NodeData::Document(..) = &self.data {
+            panic!("find_document whilst we are a document!");
+        }
+
+        if let Some(parent) = self.parent.upgrade() {
+            let parent_ref = parent.clone();
+            let parent_ref = parent_ref.as_ref().borrow();
+            let is_document = parent_ref.data.is_document();
+            drop(parent_ref);
+
+            if is_document {
+                return parent;
+            }
+        }
+
+        panic!("No document found in tree");
     }
 
     pub fn on_event(&mut self, event: &mut Event) {
@@ -211,9 +241,11 @@ pub fn create_child(parent_ref: Rc<RefCell<Node>>, data: NodeData) -> Rc<RefCell
 }
 
 impl Document {
-    pub fn new(text_settings: TextSettings, page_settings: PageSettings) -> Node {
+    pub fn new(text_settings: TextSettings, page_settings: PageSettings,
+               document_properties: document_properties::DocumentProperties) -> Node {
         let mut node = Node::new(NodeData::Document(Self {
-            page_settings
+            page_settings,
+            document_properties
         }));
 
         node.text_settings = text_settings;
@@ -248,6 +280,7 @@ pub struct Paragraph;
 #[derive(Debug)]
 pub struct Document {
     pub page_settings: PageSettings,
+    pub document_properties: document_properties::DocumentProperties,
 }
 
 #[derive(Debug)]

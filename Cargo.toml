@@ -6,7 +6,7 @@ license = "BSD-2-Clause"
 name = "uffice"
 publish = false
 repository = "https://github.com/usadson/uffice"
-version = "0.1.0"
+version = "0.2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

@@ -132,12 +132,19 @@ fn draw_document(archive_path: &str) -> DocumentResult {
         StyleManager::from_document(&styles_document, &numbering_manager).unwrap()
     };
 
+    let mut document_properties = wp::document_properties::DocumentProperties::new();
+    if let Some(txt) = load_archive_file_to_string(&mut archive, "docProps/core.xml") {
+        if let Ok(document) = xml::Document::parse(&txt) {
+            document_properties.import_core_file_properties_part(&document);
+        }
+    }
+
     let _frame = profiler.frame(String::from("Document"));
     let document_text = load_archive_file_to_string(&mut archive, "word/document.xml")
             .expect("Archive missing word/document.xml: this file is not a WordprocessingML document!");
     let document = xml::Document::parse(&document_text)
             .expect("Failed to parse document");
-    word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager)
+    word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager, document_properties)
 }
 
 struct Scroller {
@@ -568,7 +575,7 @@ impl<'a> Application<'a> {
 
             self.window.clear(APPLICATION_BACKGROUND_COLOR);
 //          let mut y = VERTICAL_PAGE_MARGIN * factor - self.scroller.content_height * self.scroller.position();
-            let mut y = (VERTICAL_PAGE_MARGIN - self.scroller.document_height * self.scroller.value) * self.zoom_level;
+            let mut y = (VERTICAL_PAGE_MARGIN - self.scroller.content_height * self.scroller.value) * self.zoom_level;
 
             for render_texture in &self.page_textures {
                 // I don't know rust well enough to be able to keep a Sprite
