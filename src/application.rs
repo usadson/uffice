@@ -19,7 +19,7 @@ use sfml::window::*;
 use notify::{Watcher, RecursiveMode};
 
 use crate::gui::animate::Animator;
-use crate::gui::animate::InterpolatedValue;
+use crate::gui::animate::Zoomer;
 use crate::gui::scroll::Scroller;
 use crate::gui::view::document_view::VERTICAL_PAGE_MARGIN;
 use crate::text_settings::Position;
@@ -28,15 +28,6 @@ use crate::wp::MouseEvent;
 
 /// The background color of the application. This is the color under the pages.
 const APPLICATION_BACKGROUND_COLOR: Color = Color::rgb(29, 28, 33);
-
-/// The zoom levels the user can step through using control + or control -.
-const ZOOM_LEVELS: [f32; 19] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.2, 1.33, 1.5, 1.7, 2.0, 2.5, 3.0, 4.0, 5.0];
-
-/// Zoom animation speed/duration in milliseconds.
-/// TODO: Change this to from f32 to Duration.
-const ZOOM_ANIMATION_SPEED: f32 = 150.0;
-
-const DEFAULT_ZOOM_LEVEL_INDEX: usize = 4;
 
 /// After how much time should a tooltip be shown (if applicable).
 ///
@@ -88,10 +79,8 @@ pub struct Application<'a> {
     is_draw_invalidated: Arc<AtomicBool>,
     scroller: Scroller,
 
-    zoom_index: usize,
-
     /// This defines how zoomed in or out the pages are.
-    zoom_level: InterpolatedValue,
+    zoomer: Zoomer,
 
     mouse_position: Vector2f,
     last_mouse_move: Instant,
@@ -159,8 +148,7 @@ impl<'a> Application<'a> {
             is_draw_invalidated,
             scroller: Scroller::new(),
 
-            zoom_index: DEFAULT_ZOOM_LEVEL_INDEX,
-            zoom_level: InterpolatedValue::new(ZOOM_LEVELS[DEFAULT_ZOOM_LEVEL_INDEX], ZOOM_ANIMATION_SPEED),
+            zoomer: Zoomer::new(),
 
             mouse_position: Vector2f::new(0.0, 0.0),
             last_mouse_move: Instant::now(),
@@ -234,9 +222,9 @@ impl<'a> Application<'a> {
                             if wheel == sfml::window::mouse::Wheel::VerticalWheel {
                                 if self.keyboard.is_control_key_dow() {
                                     if delta > 0.2 {
-                                        self.increase_zoom_level();
+                                        self.zoomer.increase_zoom_level();
                                     } else if delta < -0.2 {
-                                        self.decrease_zoom_level();
+                                        self.zoomer.decrease_zoom_level();
                                     }
                                 } else  {
                                     self.scroller.scroll(delta);
@@ -323,7 +311,7 @@ impl<'a> Application<'a> {
             }
 
             self.window.clear(APPLICATION_BACKGROUND_COLOR);
-            let zoom_level = self.zoom_level.get();
+            let zoom_level = self.zoomer.zoom_factor();
 
             if let Some(view) = &mut self.view {
                 view.handle_event(&mut crate::gui::view::Event::Draw(crate::gui::view::DrawEvent{
@@ -356,12 +344,12 @@ impl<'a> Application<'a> {
     fn on_key_released(&mut self, code: Key, _alt: bool, ctrl: bool, _shift: bool, _system: bool) {
         // Control +
         if ctrl && code == Key::Equal {
-            self.increase_zoom_level();
+            self.zoomer.increase_zoom_level();
         }
 
         // Control -
         if ctrl && code == Key::Hyphen {
-            self.decrease_zoom_level();
+            self.zoomer.decrease_zoom_level();
         }
 
         match code {
@@ -374,22 +362,6 @@ impl<'a> Application<'a> {
     fn dump_dom_tree(&self) {
         if let Some(view) = &self.view {
             view.dump_dom_tree();
-        }
-    }
-
-    fn increase_zoom_level(&mut self) {
-        let next_zoom_index = self.zoom_index + 1;
-        if next_zoom_index < ZOOM_LEVELS.len() {
-            self.zoom_index = next_zoom_index;
-            self.zoom_level.change(ZOOM_LEVELS[next_zoom_index]);
-        }
-    }
-
-    fn decrease_zoom_level(&mut self) {
-        if self.zoom_index != 0 {
-            let next_zoom_index = self.zoom_index - 1;
-            self.zoom_index = next_zoom_index;
-            self.zoom_level.change(ZOOM_LEVELS[next_zoom_index]);
         }
     }
 
