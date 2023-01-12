@@ -75,3 +75,6 @@ The following checklist documents the requirements that have to put in place to 
 
 ## Licensing
 This project is currently licensed under a BSD-2-Clause-compatible [license](LICENSE.md), but uses various dependencies, with distinct licenses each.
+
+## Legal
+For any legal questions or issues, including patents and IP, please contact me via email or [Twitter](https://twitter.com/TAGerritsen).
