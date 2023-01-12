@@ -3,3 +3,4 @@
 
 pub mod app;
 pub mod painter;
+pub mod scroll;
