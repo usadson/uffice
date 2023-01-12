@@ -4,7 +4,7 @@
 use sfml::{graphics::{RenderWindow, RectangleShape, Shape, RenderTarget, Transformable, Rect, Color}, system::Vector2f};
 use uffice_lib::math;
 
-use crate::application::Animator;
+use super::animate::Animator;
 
 pub const SCROLL_BAR_WIDTH: f32 = 20.0;
 
