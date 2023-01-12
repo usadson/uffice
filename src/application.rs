@@ -45,6 +45,10 @@ const APPLICATION_BACKGROUND_COLOR: Color = Color::rgb(29, 28, 33);
 /// The zoom levels the user can step through using control + or control -.
 const ZOOM_LEVELS: [f32; 19] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.2, 1.33, 1.5, 1.7, 2.0, 2.5, 3.0, 4.0, 5.0];
 
+/// Zoom animation speed/duration in milliseconds.
+/// TODO: Change this to from f32 to Duration.
+const ZOOM_ANIMATION_SPEED: f32 = 150.0;
+
 const DEFAULT_ZOOM_LEVEL_INDEX: usize = 4;
 
 /// After how much time should a tooltip be shown (if applicable).
@@ -175,6 +179,31 @@ impl Animator {
     }
 }
 
+struct InterpolatedValue {
+    animator: Animator,
+    start_value: f32,
+    end_value: f32,
+}
+
+impl InterpolatedValue {
+    pub fn new(start_value: f32, duration_ms: f32) -> Self {
+        Self {
+            animator: Animator::new_with_delay(duration_ms),
+            start_value,
+            end_value: start_value
+        }
+    }
+
+    pub fn change(&mut self, new_value: f32) {
+        self.start_value = self.get();
+        self.end_value = new_value;
+    }
+
+    pub fn get(&mut self) -> f32 {
+        Scroller::bound_position(math::lerp_precise_f32(self.start_value, self.end_value, self.animator.update()))
+    }
+}
+
 enum TooltipState {
     /// The mouse was moved but the timeout didn't expire yet.
     Unchecked,
@@ -209,7 +238,7 @@ pub struct Application<'a> {
     zoom_index: usize,
 
     /// This defines how zoomed in or out the pages are.
-    zoom_level: f32,
+    zoom_level: InterpolatedValue,
 
     page_textures: Vec<Rc<RefCell<RenderTexture>>>,
 
@@ -281,7 +310,7 @@ impl<'a> Application<'a> {
             document: None,
 
             zoom_index: DEFAULT_ZOOM_LEVEL_INDEX,
-            zoom_level: ZOOM_LEVELS[DEFAULT_ZOOM_LEVEL_INDEX],
+            zoom_level: InterpolatedValue::new(ZOOM_LEVELS[DEFAULT_ZOOM_LEVEL_INDEX], ZOOM_ANIMATION_SPEED),
             page_textures: Vec::new(),
 
             mouse_position: Vector2f::new(0.0, 0.0),
@@ -484,8 +513,8 @@ impl<'a> Application<'a> {
             }
 
             self.window.clear(APPLICATION_BACKGROUND_COLOR);
-//          let mut y = VERTICAL_PAGE_MARGIN * factor - self.scroller.content_height * self.scroller.position();
-            let mut y = (VERTICAL_PAGE_MARGIN - self.scroller.content_height * self.scroller.value) * self.zoom_level;
+            let zoom_level = self.zoom_level.get();
+            let mut y = (VERTICAL_PAGE_MARGIN - self.scroller.content_height * self.scroller.position()) * zoom_level;
 
             for render_texture in &self.page_textures {
                 // I don't know rust well enough to be able to keep a Sprite
@@ -500,7 +529,7 @@ impl<'a> Application<'a> {
                 let full_size = window_size.x as f32;
                 let page_size = sprite.texture_rect().width as f32;
 
-                self.scale = full_size * self.zoom_level / page_size;
+                self.scale = full_size * zoom_level / page_size;
                 let centered_x = (full_size - page_size * self.scale) / 2.0;
                 sprite.set_scale((self.scale, self.scale));
 
@@ -511,7 +540,7 @@ impl<'a> Application<'a> {
 
                 sprite.set_color(Color::rgba(255, 255, 255, (255.0 * page_introduction_animator.update()) as u8));
 
-                y += sprite.global_bounds().size().y + VERTICAL_PAGE_GAP * self.zoom_level;
+                y += sprite.global_bounds().size().y + VERTICAL_PAGE_GAP * zoom_level;
 
                 self.document_rect = sprite.global_bounds();
                 self.window.draw(&sprite);
@@ -569,7 +598,7 @@ impl<'a> Application<'a> {
         let next_zoom_index = self.zoom_index + 1;
         if next_zoom_index < ZOOM_LEVELS.len() {
             self.zoom_index = next_zoom_index;
-            self.zoom_level = ZOOM_LEVELS[next_zoom_index];
+            self.zoom_level.change(ZOOM_LEVELS[next_zoom_index]);
         }
     }
 
@@ -577,7 +606,7 @@ impl<'a> Application<'a> {
         if self.zoom_index != 0 {
             let next_zoom_index = self.zoom_index - 1;
             self.zoom_index = next_zoom_index;
-            self.zoom_level = ZOOM_LEVELS[next_zoom_index];
+            self.zoom_level.change(ZOOM_LEVELS[next_zoom_index]);
         }
     }
 
