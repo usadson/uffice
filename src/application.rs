@@ -300,6 +300,7 @@ pub struct Application<'a> {
 
     window: RenderWindow,
     cursor: SfBox<Cursor>,
+    keyboard: uffice_lib::Keyboard,
 
     interface_font: SfBox<Font>,
 
@@ -374,6 +375,7 @@ impl<'a> Application<'a> {
             watcher,
             window,
             cursor: Cursor::from_system(CursorType::Arrow).unwrap(),
+            keyboard: uffice_lib::Keyboard::new(),
 
             interface_font: load_interface_font().unwrap(),
 
@@ -461,6 +463,8 @@ impl<'a> Application<'a> {
             let window_size = self.window.size();
             {
                 while let Some(event) = self.window.poll_event() {
+                    self.keyboard.handle_sfml_event(&event);
+
                     match event {
                         Event::Closed => self.window.close(),
                         Event::Resized { width, height } => {
@@ -481,11 +485,22 @@ impl<'a> Application<'a> {
                             self.on_key_pressed(code, alt, ctrl, shift, system),
                         Event::KeyReleased { code, alt, ctrl, shift, system } =>
                             self.on_key_released(code, alt, ctrl, shift, system),
+
                         Event::MouseWheelScrolled { wheel, delta, x: _, y: _ } => {
+                            println!("Scroll {:?} {}", wheel, delta);
                             if wheel == sfml::window::mouse::Wheel::VerticalWheel {
-                                self.scroller.scroll(delta);
+                                if self.keyboard.is_control_key_dow() {
+                                    if delta > 0.2 {
+                                        self.increase_zoom_level();
+                                    } else if delta < -0.2 {
+                                        self.decrease_zoom_level();
+                                    }
+                                } else  {
+                                    self.scroller.scroll(delta);
+                                }
                             }
                         }
+
                         Event::MouseButtonPressed { button, x, y } => {
                             if button == sfml::window::mouse::Button::Left {
                                 mouse_position = Vector2f::new(x as f32, y as f32);
