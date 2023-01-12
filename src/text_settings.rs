@@ -308,7 +308,7 @@ impl TextSettings {
             let indentation = indentation as f32 * TWELFTEENTH_POINT;
             //println!("  Step: {}", indentation);
 
-            let x = ((x / indentation) as u32 + 2) as f32 * indentation;
+            let x = ((x / indentation) as u32 + 1) as f32 * indentation;
             //println!("  X: {}", x);
 
             // return if let Some(hanging) = self.indentation_hanging {

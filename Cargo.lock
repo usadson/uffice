@@ -1497,15 +1497,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "roxmltree"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb6d47b59770b0ae88c7f270c68502832ec14d8c7ab5f7a584f204bb76dbfd8e"
-dependencies = [
- "xmlparser",
-]
-
-[[package]]
 name = "rustc_version"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1698,7 +1689,7 @@ checksum = "a281c39df7d8a0a97e9430409abb466ff4bd046875c4d97591935042bbffc898"
 dependencies = [
  "cmake",
  "libc",
- "roxmltree 0.14.1",
+ "roxmltree",
 ]
 
 [[package]]
@@ -1949,7 +1940,7 @@ checksum = "9e79c4d996edb816c91e4308506774452e55e95c3c9de07b6729e17e15a5ef81"
 
 [[package]]
 name = "uffice"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytemuck",
  "chrono",
@@ -1958,7 +1949,7 @@ dependencies = [
  "font-kit",
  "notify",
  "registry",
- "roxmltree 0.16.0",
+ "roxmltree",
  "sfml",
  "structopt",
  "strum_macros",
