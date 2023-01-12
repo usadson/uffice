@@ -3,5 +3,6 @@
 
 pub mod animate;
 pub mod app;
+pub mod view;
 pub mod painter;
 pub mod scroll;

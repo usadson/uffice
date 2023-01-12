@@ -1,7 +1,6 @@
 // Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -11,7 +10,6 @@ use std::time::Duration;
 use std::time::Instant;
 
 use font_kit::family_name::FamilyName;
-use roxmltree as xml;
 
 use sfml::SfBox;
 use sfml::graphics::*;
@@ -20,26 +18,13 @@ use sfml::window::*;
 
 use notify::{Watcher, RecursiveMode};
 
-use uffice_lib::{profile_expr, profiling::Profiler, math};
-
 use crate::gui::animate::Animator;
 use crate::gui::animate::InterpolatedValue;
 use crate::gui::scroll::Scroller;
-use crate::relationships::Relationships;
-use crate::style::StyleManager;
+use crate::gui::view::document_view::VERTICAL_PAGE_MARGIN;
 use crate::text_settings::Position;
-use crate::word_processing;
-use crate::word_processing::DocumentResult;
 use crate::wp;
 use crate::wp::MouseEvent;
-use crate::wp::numbering::NumberingManager;
-
-/// The height from the top to the first page, and from the end of the
-/// last page to the bottom.
-const VERTICAL_PAGE_MARGIN: f32 = 20.0;
-
-/// The gaps between the pages.
-const VERTICAL_PAGE_GAP: f32 = 30.0;
 
 /// The background color of the application. This is the color under the pages.
 const APPLICATION_BACKGROUND_COLOR: Color = Color::rgb(29, 28, 33);
@@ -73,72 +58,6 @@ pub fn load_archive_file_to_string(archive: &mut zip::ZipArchive<std::fs::File>,
     }
 }
 
-// A4: 210 × 297
-fn draw_document(archive_path: &str) -> DocumentResult {
-    let mut profiler = Profiler::new(String::from("Document Rendering"));
-
-    let archive_file = profile_expr!(profiler, "Open Archive", std::fs::File::open(archive_path)
-            .expect("Failed to open specified file"));
-
-    let mut archive = profile_expr!(profiler, "Read Archive", zip::ZipArchive::new(archive_file)
-            .expect("Failed to read ZIP archive"));
-
-    for i in 0..archive.len() {
-        let file = archive.by_index(i).unwrap();
-        println!("[Document] ZIP: File: {}", file.name());
-    }
-
-    let document_relationships;
-    {
-        let _frame = profiler.frame(String::from("Document Relationships"));
-
-        let txt = load_archive_file_to_string(&mut archive, "word/_rels/document.xml.rels")
-                .expect("Document.xml.rels missing, assuming this is not a DOCX file.");
-        if let Ok(document) = xml::Document::parse(&txt) {
-            document_relationships = Relationships::load_xml(&document, &mut archive).unwrap();
-        } else {
-            println!("[Relationships] (word/_rels/document.xml.rels) Error!");
-            document_relationships = Relationships::empty();
-        }
-    }
-
-    let numbering_manager = {
-        let _frame = profiler.frame(String::from("Numbering Definitions"));
-
-        if let Some(numbering_document_text) = load_archive_file_to_string(&mut archive, "word/numbering.xml") {
-            let numbering_document = xml::Document::parse(&numbering_document_text)
-                .expect("Failed to parse numbering document");
-            NumberingManager::from_xml(&numbering_document)
-        } else {
-            NumberingManager::new()
-        }
-    };
-
-    let style_manager = {
-        let _frame = profiler.frame(String::from("Style Definitions"));
-
-        let styles_document_text = load_archive_file_to_string(&mut archive, "word/styles.xml")
-                .expect("Style definitions missing, assuming this is not a DOCX file.");
-        let styles_document = xml::Document::parse(&styles_document_text)
-                .expect("Failed to parse styles document");
-        StyleManager::from_document(&styles_document, &numbering_manager).unwrap()
-    };
-
-    let mut document_properties = wp::document_properties::DocumentProperties::new();
-    if let Some(txt) = load_archive_file_to_string(&mut archive, "docProps/core.xml") {
-        if let Ok(document) = xml::Document::parse(&txt) {
-            document_properties.import_core_file_properties_part(&document);
-        }
-    }
-
-    let _frame = profiler.frame(String::from("Document"));
-    let document_text = load_archive_file_to_string(&mut archive, "word/document.xml")
-            .expect("Archive missing word/document.xml: this file is not a WordprocessingML document!");
-    let document = xml::Document::parse(&document_text)
-            .expect("Failed to parse document");
-    word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager, document_properties)
-}
-
 enum TooltipState {
     /// The mouse was moved but the timeout didn't expire yet.
     Unchecked,
@@ -161,21 +80,18 @@ pub struct Application<'a> {
     cursor: SfBox<Cursor>,
     keyboard: uffice_lib::Keyboard,
 
+    // In the future, we can make this a vector to have multiple tabs!
+    view: Option<crate::gui::view::View>,
+
     interface_font: SfBox<Font>,
 
     is_draw_invalidated: Arc<AtomicBool>,
     scroller: Scroller,
 
-    scale: f32,
-    document_rect: Rect<f32>,
-    document: Option<Rc<RefCell<wp::Node>>>,
-
     zoom_index: usize,
 
     /// This defines how zoomed in or out the pages are.
     zoom_level: InterpolatedValue,
-
-    page_textures: Vec<Rc<RefCell<RenderTexture>>>,
 
     mouse_position: Vector2f,
     last_mouse_move: Instant,
@@ -236,17 +152,15 @@ impl<'a> Application<'a> {
             cursor: Cursor::from_system(CursorType::Arrow).unwrap(),
             keyboard: uffice_lib::Keyboard::new(),
 
+            view: None,
+
             interface_font: load_interface_font().unwrap(),
 
             is_draw_invalidated,
             scroller: Scroller::new(),
-            scale: 0.0,
-            document_rect: sfml::graphics::Rect::<f32>::new(0.0, 0.0, 0.0, 0.0),
-            document: None,
 
             zoom_index: DEFAULT_ZOOM_LEVEL_INDEX,
             zoom_level: InterpolatedValue::new(ZOOM_LEVELS[DEFAULT_ZOOM_LEVEL_INDEX], ZOOM_ANIMATION_SPEED),
-            page_textures: Vec::new(),
 
             mouse_position: Vector2f::new(0.0, 0.0),
             last_mouse_move: Instant::now(),
@@ -257,42 +171,13 @@ impl<'a> Application<'a> {
         }
     }
 
-    /// Calculates the height of all the pages, plus some vertical margins and
-    /// gaps between the pages.
-    ///
-    /// This function is used so the scroller knows how much we're able to
-    /// scroll.
-    fn calculate_content_height(&self) -> f32 {
-        // Top and bottom gaps above and below the pages.
-        let mut height = VERTICAL_PAGE_MARGIN * 2.0;
-
-        // The gaps between the pages.
-        height += (self.page_textures.len() - 1) as f32 * VERTICAL_PAGE_GAP;
-
-        for page_tex in &self.page_textures {
-            height += page_tex.as_ref().borrow().size().y as f32;
-        }
-
-        height
-    }
-
     pub fn check_interactable_for_mouse(&mut self, mouse_position: Vector2f, callback: &mut dyn FnMut(&mut wp::Node, Position))
             -> bool {
-        if !self.document_rect.contains(mouse_position) {
-            return false;
+        if let Some(view) = &self.view {
+            return view.check_interactable_for_mouse(mouse_position, callback);
         }
 
-        let mouse_position = Position::new(
-            ((mouse_position.x - self.document_rect.left) / self.scale) as u32,
-            ((mouse_position.y - self.document_rect.top) / self.scale) as u32
-        );
-
-        let doc = self.document.as_ref().unwrap();
-        let mut document = doc.borrow_mut();
-
-        document.hit_test(mouse_position, &mut |node| {
-            callback(node, mouse_position);
-        })
+        false
     }
 
     fn display_loading_screen(&mut self) {
@@ -346,7 +231,6 @@ impl<'a> Application<'a> {
                             self.on_key_released(code, alt, ctrl, shift, system),
 
                         Event::MouseWheelScrolled { wheel, delta, x: _, y: _ } => {
-                            println!("Scroll {:?} {}", wheel, delta);
                             if wheel == sfml::window::mouse::Wheel::VerticalWheel {
                                 if self.keyboard.is_control_key_dow() {
                                     if delta > 0.2 {
@@ -373,8 +257,8 @@ impl<'a> Application<'a> {
 
                                 if !mouse_down {
                                     mouse_down = true;
-                                    println!("[ClickEvent]   Document Rect @ {} x {}  w {}  h{}", self.document_rect.left, self.document_rect.top,
-                                            self.document_rect.width, self.document_rect.height);
+                                    // println!("[ClickEvent]   Document Rect @ {} x {}  w {}  h{}", self.document_rect.left, self.document_rect.top,
+                                    //         self.document_rect.width, self.document_rect.height);
                                     self.check_interactable_for_mouse(mouse_position, &mut |node, mouse_position| {
                                         node.on_event(&mut wp::Event::Click(MouseEvent::new(mouse_position)));
                                     });
@@ -399,23 +283,9 @@ impl<'a> Application<'a> {
 
                             self.reset_tooltip(mouse_position);
 
-                            if let Some(document) = &mut self.document {
-                                document.borrow_mut().apply_recursively(&mut |node, _depth| {
-                                    node.interaction_states.hover = wp::HoverState::NotHoveringOn;
-                                }, 0);
-
-                                self.check_interactable_for_mouse(mouse_position, &mut |node, position| {
-                                    node.interaction_states.hover = wp::HoverState::HoveringOver;
-
-                                    let mut event = wp::Event::Hover(wp::MouseEvent::new(position));
-                                    node.on_event(&mut event);
-
-                                    if let wp::Event::Hover(mouse_event) = &event {
-                                        if let Some(cursor) = mouse_event.new_cursor {
-                                            new_cursor = Some(cursor);
-                                        }
-                                    }
-                                });
+                            if let Some(view) = &mut self.view {
+                                let mut event = crate::gui::view::Event::MouseMoved(mouse_position, &mut new_cursor);
+                                view.handle_event(&mut event);
                             }
                         }
                         _ => (),
@@ -435,50 +305,37 @@ impl<'a> Application<'a> {
 
             new_cursor = None;
 
+            // TODO where does this factor come from again? :/
             let factor = 0.6;
+
             if self.is_draw_invalidated.swap(false, Ordering::Relaxed) {
                 self.display_loading_screen();
 
-                let (new_page_textures, document) = draw_document(&self.archive_path);
-                self.page_textures = new_page_textures.render_targets;
-                self.document = Some(document);
+                let view = crate::gui::view::View::Document(
+                    crate::gui::view::document_view::DocumentView::new(&self.archive_path)
+                );
 
-                self.scroller.content_height = self.calculate_content_height() * factor;
+                self.scroller.content_height = view.calculate_content_height() * factor;
+
+                self.view = Some(view);
+
                 page_introduction_animator.reset();
             }
 
             self.window.clear(APPLICATION_BACKGROUND_COLOR);
             let zoom_level = self.zoom_level.get();
-            let mut y = (VERTICAL_PAGE_MARGIN - self.scroller.content_height * self.scroller.position()) * zoom_level;
 
-            for render_texture in &self.page_textures {
-                // I don't know rust well enough to be able to keep a Sprite
-                // around _and_ replace the texture.
-                //
-                // But since this code is not performance-critical I don't care
-                // atm.
+            if let Some(view) = &mut self.view {
+                view.handle_event(&mut crate::gui::view::Event::Draw(crate::gui::view::DrawEvent{
+                    opaqueness: page_introduction_animator.update(),
 
-                let texture = render_texture.borrow();
-                let mut sprite = Sprite::with_texture(texture.texture());
+                    start_y: (VERTICAL_PAGE_MARGIN - self.scroller.content_height * self.scroller.position()) * zoom_level,
 
-                let full_size = window_size.x as f32;
-                let page_size = sprite.texture_rect().width as f32;
+                    window: &mut self.window,
+                    window_size: window_size,
 
-                self.scale = full_size * zoom_level / page_size;
-                let centered_x = (full_size - page_size * self.scale) / 2.0;
-                sprite.set_scale((self.scale, self.scale));
-
-                sprite.set_position((
-                    centered_x,
-                    y
-                ));
-
-                sprite.set_color(Color::rgba(255, 255, 255, (255.0 * page_introduction_animator.update()) as u8));
-
-                y += sprite.global_bounds().size().y + VERTICAL_PAGE_GAP * zoom_level;
-
-                self.document_rect = sprite.global_bounds();
-                self.window.draw(&sprite);
+                    zoom: zoom_level,
+                }))
             }
 
             self.draw_tooltip();
@@ -515,17 +372,8 @@ impl<'a> Application<'a> {
     }
 
     fn dump_dom_tree(&self) {
-        match &self.document {
-            Some(document) => {
-                document.borrow_mut().apply_recursively(&|node, depth| {
-                    print!("🌲: {}{:?}", "    ".repeat(depth), node.data);
-                    print!(" @ ({}, {})", node.position.x, node.position.y,);
-                    print!(" sized ({}x{})", node.size.x, node.size.y);
-
-                    println!();
-                }, 0);
-            }
-            None => println!("🌲: No tree"),
+        if let Some(view) = &self.view {
+            view.dump_dom_tree();
         }
     }
 
