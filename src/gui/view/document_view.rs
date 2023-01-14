@@ -261,6 +261,12 @@ impl super::ViewImpl for DocumentView {
     fn handle_event(&mut self, event: &mut super::Event) {
         match event {
             super::Event::Draw(draw_event) => self.draw(draw_event),
+
+            super::Event::Paint(_paint) => {
+                println!("Print required:");
+                self.dump_dom_tree();
+            }
+
             super::Event::MouseMoved(mouse_position, new_cursor) =>
                 self.on_mouse_moved(*mouse_position, *new_cursor),
         }

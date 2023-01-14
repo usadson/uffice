@@ -1,25 +1,36 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use super::{painter::{Painter, win32::Win32Painter, FontSpecification}, Color, Brush, Rect, Position, Size};
+use super::{painter::{Painter, win32::Win32Painter, FontSpecification}, Color, Brush, Rect, Position, Size, AppEvent};
 
 /// Get the formatted window title base, the prefix of the window title
 /// excluding the document title/path.
 ///
 /// An example result: "TheWoosh Uffice"
-const fn formatted_base_title() -> &'static str {
+pub const fn formatted_base_title() -> &'static str {
     const_format::formatcp!("{} {}", uffice_lib::constants::vendor::NAME, uffice_lib::constants::application::NAME)
 }
 
-struct App {
-    _painter: Box<dyn Painter>,
+pub struct PaintEvent<'a> {
+    pub window: &'a mut Window,
+    pub painter: Arc<RefCell<dyn Painter>>,
 }
 
-fn create_painter(window: &mut Window) -> Box<dyn Painter> {
-    Box::new(Win32Painter::new(window).expect("Failed to create painter"))
+pub trait GuiApp {
+    fn on_event(&mut self, window: &mut Window, event: AppEvent);
+
+    fn paint(&mut self, event: PaintEvent);
 }
 
-impl App {
+struct GuiAppData {
+    _painter: Arc<RefCell<dyn Painter>>,
+}
+
+fn create_painter(window: &mut Window) -> Arc<RefCell<dyn Painter>> {
+    Arc::new(RefCell::new(Win32Painter::new(window).expect("Failed to create painter")))
+}
+
+impl GuiAppData {
     pub fn new(window: &mut Window) -> Self {
         Self {
             _painter: create_painter(window)
@@ -27,8 +38,8 @@ impl App {
     }
 
     /// Returns the painter and initialises it when needed.
-    pub fn painter(&mut self) -> &mut dyn Painter {
-        self._painter.as_mut()
+    pub fn painter(&mut self) -> RefMut<dyn Painter> {
+        self._painter.borrow_mut()
     }
 
     /// This function will reset the painter, which can be useful in cases of
@@ -42,15 +53,21 @@ impl App {
     }
 }
 
-pub fn run() {
-    let event_loop = EventLoop::new();
+pub fn run<F>(app_creator: F)
+        where F: FnOnce(&mut Window, EventLoopProxy<AppEvent>) -> Box<dyn GuiApp> {
+    let event_loop = EventLoopBuilder::with_user_event()
+        .build();
+
+    let proxy = event_loop.create_proxy();
 
     let mut window = WindowBuilder::new()
         .with_title(formatted_base_title())
         .build(&event_loop)
         .unwrap();
 
-    let mut app = App::new(&mut window);
+    let mut app_data = GuiAppData::new(&mut window);
+
+    let mut app = app_creator(&mut window, proxy.clone());
 
     event_loop.run(move |event, _, control_flow| {
         // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
@@ -73,12 +90,12 @@ pub fn run() {
 
             Event::WindowEvent { event: WindowEvent::Resized(..), .. } => {
                 println!("window resized {:?}", event);
-                app.painter().handle_resize(&mut window);
+                app_data.painter().handle_resize(&mut window);
             },
 
             Event::WindowEvent { event: WindowEvent::ScaleFactorChanged{ .. }, .. } => {
                 println!("window scale factor changed {:?}", event);
-                app.painter().handle_resize(&mut window);
+                app_data.painter().handle_resize(&mut window);
             },
 
             Event::MainEventsCleared => {
@@ -99,21 +116,27 @@ pub fn run() {
                 // this event rather than in MainEventsCleared, since rendering in here allows
                 // the program to gracefully handle redraws requested by the OS.
 
-                app.painter().reset();
+                app_data.painter().reset();
 
-                app.painter().paint_rect(Brush::SolidColor(Color::RED), Rect::from_position_and_size(Position::new(0.0, 0.0), Size::new(10.0, 10.0)));
+                app_data.painter().paint_rect(Brush::SolidColor(Color::RED), Rect::from_position_and_size(Position::new(0.0, 0.0), Size::new(10.0, 10.0)));
 
-                app.painter().select_font(FontSpecification::new("Calibri", 14.0)).expect("Font system doesn't work");
-                app.painter().paint_text(Brush::SolidColor(Color::BLUE), Position::new(0.0, 0.0), "Ciao gente! ^_^");
+                app_data.painter().select_font(FontSpecification::new("Calibri", 14.0)).expect("Font system doesn't work");
+                app_data.painter().paint_text(Brush::SolidColor(Color::BLUE), Position::new(0.0, 0.0), "Ciao gente! ^_^");
 
-                app.painter().display();
+                app.paint(PaintEvent {
+                    window: &mut window,
+                    painter: app_data._painter.clone(),
+                });
+
+                app_data.painter().display();
             },
+            Event::UserEvent(app_event) => app.on_event(&mut window, app_event),
             _ => ()
         }
     });
 }
 
-use std::sync::Arc;
+use std::{sync::Arc, cell::{RefCell, RefMut}};
 
 use bytemuck::{Pod, Zeroable};
 
@@ -149,7 +172,7 @@ use vulkano::{
 use vulkano_win::VkSurfaceBuild;
 use winit::{
     event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::{ControlFlow, EventLoop, EventLoopProxy, EventLoopBuilder},
     window::{Window, WindowBuilder},
 };
 

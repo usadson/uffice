@@ -1,11 +1,17 @@
 // Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ops::Deref;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::Sender;
+use std::sync::mpsc::channel;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -17,10 +23,15 @@ use sfml::system::Vector2f;
 use sfml::window::*;
 
 use notify::{Watcher, RecursiveMode};
+use winit::event_loop::EventLoopProxy;
 
+use crate::gui::AppEvent;
+use crate::gui::Size;
 use crate::gui::animate::Animator;
 use crate::gui::animate::Zoomer;
+use crate::gui::painter::Painter;
 use crate::gui::scroll::Scroller;
+use crate::gui::view::View;
 use crate::gui::view::document_view::VERTICAL_PAGE_MARGIN;
 use crate::text_settings::Position;
 use crate::wp;
@@ -202,7 +213,7 @@ impl<'a> Application<'a> {
                         Event::Resized { width, height } => {
                             //self.is_draw_invalidated.store(true, Ordering::Relaxed);
 
-                            self.window.set_view(View::new(
+                            self.window.set_view(sfml::graphics::View::new(
                                 Vector2f::new(
                                     width as f32 / 2.0,
                                     height as f32 / 2.0
@@ -440,4 +451,167 @@ impl<'a> Application<'a> {
         self.last_mouse_move = Instant::now();
         self.tooltip_text = String::new();
     }
+}
+
+#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct TabId(usize);
+
+unsafe impl Sync for TabId {}
+unsafe impl Send for TabId {}
+
+pub enum TabState {
+    Loading,
+    Ready {
+        view: View,
+    },
+}
+
+enum TabEvent {
+    Paint {
+        painter: Arc<RefCell<dyn Painter>>,
+        window_size: Size<u32>,
+    },
+}
+
+unsafe impl Send for TabEvent {}
+
+pub struct Tab {
+    state: TabState,
+    path: PathBuf,
+
+    event_loop_proxy: EventLoopProxy<AppEvent>,
+    tab_event_sender: Sender<TabEvent>,
+
+    /// Sent when the event was finished.
+    finished_paint_receiver: Receiver<()>,
+}
+
+impl Tab {
+    pub fn new(id: TabId, path: PathBuf, event_loop_proxy: EventLoopProxy<AppEvent>) -> Self {
+        let (proxy_tx, proxy_rx) = channel();
+        let (tab_event_sender, tab_event_receiver) = channel();
+        let (finished_paint_sender, finished_paint_receiver) = channel();
+
+        let path_str = path.to_str().unwrap().to_owned();
+        std::thread::spawn(move || {
+            let proxy: EventLoopProxy<AppEvent> = proxy_rx.recv().unwrap();
+            drop(proxy_rx);
+
+            let mut view = View::Document(crate::gui::view::document_view::DocumentView::new(&path_str));
+            proxy.send_event(AppEvent::TabBecameReady(id)).unwrap();
+
+            for event in tab_event_receiver {
+                match event {
+                    TabEvent::Paint{ painter, window_size } => {
+                        // Scope this so the painter borrow is dropped before
+                        // sending the finish message.
+                        {
+                            let painter = &mut *painter.as_ref().borrow_mut();
+                            view.handle_event(&mut crate::gui::view::Event::Paint(crate::gui::view::PaintEvent {
+                                opaqueness: 1.0,
+                                painter,
+                                start_y: 10.0,
+                                window_size,
+                                zoom: 0.7
+                            }));
+
+                        }
+
+                        assert!(painter.try_borrow_mut().is_ok(), "Borrow painter as mutable failed after finish paint?");
+                        finished_paint_sender.send(()).unwrap();
+                    }
+                }
+            }
+        });
+
+        proxy_tx.send(event_loop_proxy.clone()).unwrap();
+        drop(proxy_tx);
+
+        Self {
+            state: TabState::Loading,
+            path,
+            event_loop_proxy,
+            tab_event_sender,
+            finished_paint_receiver,
+        }
+    }
+
+    pub fn on_became_ready(&mut self) {
+
+    }
+
+    fn on_paint(&self, event: &crate::gui::app::PaintEvent) {
+        assert!(event.painter.try_borrow_mut().is_ok(), "Failed to painter borrow as mutable; we can never send the PaintEvent to the tab!");
+
+        let size = event.window.inner_size();
+        self.tab_event_sender.send(TabEvent::Paint {
+            painter: event.painter.clone(),
+            window_size: Size::new(size.width, size.height),
+        }).unwrap();
+
+        self.finished_paint_receiver.recv().unwrap();
+        assert!(event.painter.try_borrow_mut().is_ok(), "Failed to painter borrow as mutable while finish_paint was received!");
+    }
+}
+
+pub struct App {
+    event_loop_proxy: EventLoopProxy<AppEvent>,
+
+    next_tab_id: usize,
+    current_visible_tab: Option<TabId>,
+    tabs: HashMap<TabId, Tab>,
+}
+
+impl App {
+    pub fn new(window: &mut winit::window::Window, event_loop_proxy: EventLoopProxy<AppEvent>, first_file_to_open: String) -> Self {
+        window.set_title(&format!("{} - {}", crate::gui::app::formatted_base_title(), first_file_to_open));
+
+        let mut app = Self {
+            event_loop_proxy,
+            next_tab_id: 1000,
+            current_visible_tab: None,
+            tabs: HashMap::new(),
+        };
+
+        app.add_tab(PathBuf::from(first_file_to_open));
+
+        app
+    }
+
+    fn add_tab(&mut self, path: PathBuf) {
+        let tab_id = TabId(self.next_tab_id);
+        self.next_tab_id += 1;
+
+        self.tabs.insert(tab_id, Tab::new(tab_id, path, self.event_loop_proxy.clone()));
+
+        if self.current_visible_tab.is_some() {
+            return;
+        }
+
+        self.current_visible_tab = Some(tab_id);
+    }
+}
+
+impl crate::gui::app::GuiApp for App {
+
+    fn on_event(&mut self, window: &mut winit::window::Window, event: AppEvent) {
+        match event {
+            AppEvent::TabBecameReady(tab_id) => {
+                self.tabs.get_mut(&tab_id).unwrap().on_became_ready();
+
+                if Some(tab_id) == self.current_visible_tab {
+                    window.request_redraw();
+                }
+            }
+        }
+    }
+
+    fn paint(&mut self, event: crate::gui::app::PaintEvent) {
+        assert!(event.painter.try_borrow_mut().is_ok(), "Failed to painter borrow as mutable; cannot paint App");
+
+        if let Some(current_tab_id) = self.current_visible_tab {
+            self.tabs.get_mut(&current_tab_id).unwrap().on_paint(&event);
+        }
+    }
+
 }

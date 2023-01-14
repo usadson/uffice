@@ -39,5 +39,7 @@ fn main() {
     // );
     // app.run();
     //gui::app::App::run();
-    gui::app::run();
+    gui::app::run(|window, event_loop_proxy| {
+        Box::new(application::App::new(window, event_loop_proxy, std::env::var("UFFICE_TEST_FILE").expect("No file given")))
+    });
 }

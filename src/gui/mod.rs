@@ -1,6 +1,8 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+use crate::application::TabId;
+
 pub mod animate;
 pub mod app;
 pub mod view;
@@ -152,3 +154,11 @@ pub enum Brush {
     /// A brush with a solid color.
     SolidColor(Color),
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AppEvent {
+    /// A certain tab was loading and is now ready.
+    TabBecameReady(TabId),
+}
+
+unsafe impl Send for AppEvent {}
