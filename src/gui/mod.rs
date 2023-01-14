@@ -112,7 +112,7 @@ pub struct Color {
 impl Color {
 
     pub const BLACK: Color = Color::from_rgb(0, 0, 0);
-    pub const WHITE: Color = Color::from_rgb(0, 0, 0);
+    pub const WHITE: Color = Color::from_rgb(255, 255, 255);
 
     pub const RED: Color = Color::from_rgb(255, 0, 0);
     pub const GREEN: Color = Color::from_rgb(0, 255, 0);

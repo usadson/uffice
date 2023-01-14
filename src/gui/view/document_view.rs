@@ -12,7 +12,6 @@ use sfml::{
     graphics::{
         RenderTexture,
         RenderTarget,
-        Rect,
         Sprite,
         Transformable, Color,
     },
@@ -25,16 +24,16 @@ use uffice_lib::{profiling::Profiler, profile_expr};
 use crate::{
     wp::{
         self,
-        numbering::NumberingManager,
+        numbering::NumberingManager, TextPart,
     },
     word_processing::{
         DocumentResult,
-        self,
+        self, HALF_POINT,
     },
     application::load_archive_file_to_string,
     relationships::Relationships,
     style::StyleManager,
-    text_settings::Position,
+    text_settings::Position, gui::{painter::FontSpecification, Rect, Size},
 };
 
 use super::{
@@ -56,7 +55,7 @@ pub struct DocumentView {
 
     document: Option<Rc<RefCell<crate::wp::Node>>>,
 
-    content_rect: Rect<f32>,
+    content_rect: sfml::graphics::Rect<f32>,
     page_textures: Vec<Rc<RefCell<RenderTexture>>>,
 }
 
@@ -141,7 +140,7 @@ impl DocumentView {
         view
     }
 
-    fn calculate_content_rect(&self) -> Rect<f32> {
+    fn calculate_content_rect(&self) -> sfml::graphics::Rect<f32> {
         let mut width = 0.0;
 
         for page in &self.page_textures {
@@ -151,7 +150,7 @@ impl DocumentView {
             }
         }
 
-        Rect::<f32>::new(0.0, 0.0, width, self.calculate_content_height())
+        sfml::graphics::Rect::<f32>::new(0.0, 0.0, width, self.calculate_content_height())
     }
 
     fn draw(&mut self, event: &mut super::DrawEvent) {
@@ -182,6 +181,90 @@ impl DocumentView {
 
             sprite.set_color(Color::rgba(255, 255, 255, (255.0 * event.opaqueness) as u8));
             event.window.draw(&sprite);
+        }
+    }
+
+    /// In the future we should construct a layout tree from the DOM tree,
+    /// and based on the layout tree a paint tree. That way we can just iterate
+    /// the paint nodes and draw the document fast.
+    fn paint(&mut self, event: &mut super::PaintEvent) {
+        let mut y = event.start_y;
+        let max_y = event.window_size.height as f32;
+
+        if let Some(document) = &self.document {
+            let (first_page, last_page, page_settings) = {
+                let doc = document.as_ref().borrow();
+
+                (doc.page_first, doc.page_last, match &doc.data {
+                    crate::wp::NodeData::Document(d) => {
+                        d.page_settings
+                    }
+                    _ => panic!("Invalid document Node: {:?}", document),
+                })
+            };
+
+            let page_width = page_settings.size.width as f32 * event.zoom / 12.0;
+            let page_height = page_settings.size.height as f32 * event.zoom / 12.0;
+            let page_size = Size::new(page_width, page_height);
+            let start_x = (event.window_size.width as f32 - page_width) / 2.0;
+
+            let start_y_pages = (first_page..(last_page + 1)).map(|index| {
+                let page_size_and_margin = (VERTICAL_PAGE_GAP + page_settings.size.height as f32) * event.zoom;
+                let start_y = event.start_y + VERTICAL_PAGE_MARGIN * event.zoom + index as f32 * page_size_and_margin;
+
+                if start_y < max_y {
+                    event.painter.paint_rect(crate::gui::Brush::SolidColor(crate::gui::Color::WHITE), crate::gui::Rect {
+                        left: start_x,
+                        right: start_x + page_width,
+
+                        top: start_y,
+                        bottom: start_y + page_height
+                    });
+                }
+
+                start_y
+            }).collect::<Vec<f32>>();
+
+            let mut previous_page = None;
+
+            document.borrow_mut().apply_recursively_mut(&mut |node, _depth| {
+                let start_y = start_y_pages[node.page_first];
+
+                if start_y > max_y {
+                    // Outside the bounds of the window.
+                    return;
+                }
+
+                let position = crate::gui::Position::new(
+                    start_x + node.position.x * event.zoom,
+                    start_y + node.position.y * event.zoom
+                );
+
+                if Some(node.page_first) != previous_page {
+                    if previous_page.is_some() {
+                        event.painter.end_clip_region();
+                    }
+
+                    previous_page = Some(node.page_first);
+                    event.painter.begin_clip_region(Rect::from_position_and_size(position, page_size));
+                }
+
+                match &node.data {
+                    wp::NodeData::TextPart(part) => {
+                        println!("Text \"{}\" @ {:?}", part.text, position);
+
+                        let text_size = node.text_settings.non_complex_text_size.unwrap() as f32 * HALF_POINT * event.zoom;
+                        let font_family_name = node.text_settings.font.clone().unwrap_or(String::from("Calibri"));
+                        event.painter.select_font(FontSpecification::new(&font_family_name, text_size, node.text_settings.font_weight())).unwrap();
+                        event.painter.paint_text(node.text_settings.brush(), position, &part.text);
+                    }
+                    _ => ()
+                }
+            }, 0);
+
+            if previous_page.is_some() {
+                event.painter.end_clip_region();
+            }
         }
     }
 
@@ -261,12 +344,7 @@ impl super::ViewImpl for DocumentView {
     fn handle_event(&mut self, event: &mut super::Event) {
         match event {
             super::Event::Draw(draw_event) => self.draw(draw_event),
-
-            super::Event::Paint(_paint) => {
-                println!("Print required:");
-                self.dump_dom_tree();
-            }
-
+            super::Event::Paint(event) => self.paint(event),
             super::Event::MouseMoved(mouse_position, new_cursor) =>
                 self.on_mouse_moved(*mouse_position, *new_cursor),
         }

@@ -118,11 +118,6 @@ pub fn run<F>(app_creator: F)
 
                 app_data.painter().reset();
 
-                app_data.painter().paint_rect(Brush::SolidColor(Color::RED), Rect::from_position_and_size(Position::new(0.0, 0.0), Size::new(10.0, 10.0)));
-
-                app_data.painter().select_font(FontSpecification::new("Calibri", 14.0)).expect("Font system doesn't work");
-                app_data.painter().paint_text(Brush::SolidColor(Color::BLUE), Position::new(0.0, 0.0), "Ciao gente! ^_^");
-
                 app.paint(PaintEvent {
                     window: &mut window,
                     painter: app_data._painter.clone(),

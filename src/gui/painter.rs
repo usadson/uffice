@@ -1,6 +1,8 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+use std::default;
+
 use super::{Brush, Rect, Position, Size};
 
 #[cfg(windows)]
@@ -15,18 +17,37 @@ pub enum FontSelectionError {
     NotFound,
 }
 
+/// https://learn.microsoft.com/en-us/typography/opentype/spec/os2#usweightclass
+#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
+pub enum FontWeight {
+    Custom(f32),
+
+    Thin,
+    ExtraLight,
+    Light,
+    SemiLight,
+    #[default] Regular,
+    Medium,
+    SemiBold,
+    Bold,
+    ExtraBold,
+    Black,
+}
+
 /// Specifies what font to use.
 #[derive(Debug, Clone, Copy)]
 pub struct FontSpecification<'a> {
     family_name: &'a str,
     size: f32,
+    weight: FontWeight,
 }
 
 impl<'a> FontSpecification<'a> {
-    pub fn new(family_name: &'a str, size: f32) -> FontSpecification<'a> {
+    pub fn new(family_name: &'a str, size: f32, weight: FontWeight) -> FontSpecification<'a> {
         Self {
             family_name,
-            size
+            size,
+            weight
         }
     }
 }
@@ -56,6 +77,10 @@ pub enum PainterCache {
 /// Commands are the requested paint functions, such as [paint_rect](paint_rect).
 pub trait Painter {
 
+    /// Begins a clip region. Make sure to end this using
+    /// [end_clip_region](end_clip_region).
+    fn begin_clip_region(&mut self, rect: Rect<f32>);
+
     /// Clears a certain cache. This frees up memory for this given cache.
     fn clear_cache(&mut self, cache: PainterCache);
 
@@ -64,6 +89,8 @@ pub trait Painter {
     /// This is only applicable for Painters that schedule the commands, other
     /// painters can ignore this function.
     fn display(&mut self);
+
+    fn end_clip_region(&mut self);
 
     /// Called when the window, client rect, etc resizes.
     fn handle_resize(&mut self, window: &mut winit::window::Window);

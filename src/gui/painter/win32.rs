@@ -52,6 +52,11 @@ enum PaintCommand {
         position: Position<f32>,
         layout: mltg::TextLayout,
     },
+
+    BeginClipRegion {
+        rect: Rect<f32>,
+    },
+    EndClipRegion,
 }
 
 impl From<Rect<f32>> for mltg::Rect<f32> {
@@ -83,6 +88,45 @@ impl From<Position<f32>> for mltg::Point<f32> {
 impl From<mltg::Size<f32>> for Size<f32> {
     fn from(value: mltg::Size<f32>) -> Self {
         Self::new(value.width, value.height)
+    }
+}
+
+impl From<super::FontWeight> for font_kit::properties::Weight {
+    fn from(value: super::FontWeight) -> Self {
+        use font_kit::properties::Weight;
+        match value {
+            super::FontWeight::Custom(weight) => Weight(weight),
+
+            super::FontWeight::Thin => Weight::THIN,
+            super::FontWeight::ExtraLight => Weight::EXTRA_LIGHT,
+            super::FontWeight::Light => Weight(350.0),
+            super::FontWeight::SemiLight => Weight::LIGHT,
+            super::FontWeight::Regular => Weight::NORMAL,
+            super::FontWeight::Medium => Weight::MEDIUM,
+            super::FontWeight::SemiBold => Weight::SEMIBOLD,
+            super::FontWeight::Bold => Weight::BOLD,
+            super::FontWeight::ExtraBold => Weight::EXTRA_BOLD,
+            super::FontWeight::Black => Weight::BLACK,
+        }
+    }
+}
+
+impl From<super::FontWeight> for mltg::FontWeight {
+    fn from(value: super::FontWeight) -> Self {
+        match value {
+            super::FontWeight::Custom(_weight) => todo!("mltg is missing this API"),
+
+            super::FontWeight::Thin => mltg::FontWeight::Thin,
+            super::FontWeight::ExtraLight => mltg::FontWeight::UltraLight,
+            super::FontWeight::Light => mltg::FontWeight::Light,
+            super::FontWeight::SemiLight => mltg::FontWeight::SemiLight,
+            super::FontWeight::Regular => mltg::FontWeight::Regular,
+            super::FontWeight::Medium => mltg::FontWeight::Medium,
+            super::FontWeight::SemiBold => mltg::FontWeight::SemiBold,
+            super::FontWeight::Bold => mltg::FontWeight::Bold,
+            super::FontWeight::ExtraBold => mltg::FontWeight::UltraBold,
+            super::FontWeight::Black => mltg::FontWeight::UltraBlack,
+        }
     }
 }
 
@@ -143,9 +187,10 @@ struct Win32PainterCache {
 }
 
 fn load_font(sources: &Rc<RefCell<SharedCacheSources>>, factory: &mltg::Factory, font: super::FontSpecification) -> Result<(mltg::TextStyle, mltg::TextFormat), super::FontSelectionError> {
-    let properties = font_kit::properties::Properties::new();
-
-    // TODO bold, italic, etc.
+    let properties = font_kit::properties::Properties {
+        weight: font.weight.into(),
+        ..Default::default()
+    };
 
     let family_names = [
         font_kit::family_name::FamilyName::Title(String::from(font.family_name))
@@ -171,10 +216,11 @@ fn load_font(sources: &Rc<RefCell<SharedCacheSources>>, factory: &mltg::Factory,
             };
 
             let style = mltg::TextStyle{
+                weight: font.weight.into(),
                 ..Default::default()
             };
 
-            let format = factory.create_text_format(d2_font, font.size, Some(&style), None).expect("Failed to create text format");
+            let format = factory.create_text_format(d2_font, mltg::font_point(font.size), Some(&style), None).expect("Failed to create text format");
 
             Ok((style, format))
         }
@@ -317,6 +363,11 @@ impl Win32Painter {
 }
 
 impl super::Painter for Win32Painter {
+
+    fn begin_clip_region(&mut self, rect: Rect<f32>) {
+        self.commands.push(PaintCommand::BeginClipRegion { rect });
+    }
+
     fn clear_cache(&mut self, cache: super::PainterCache) {
         self.caches.remove(&cache);
     }
@@ -335,10 +386,16 @@ impl super::Painter for Win32Painter {
                     PaintCommand::Text { brush, position, layout } => {
                         target_cmd.fill(&layout.position(*position), &self.translate_brush(brush));
                     }
+                    PaintCommand::BeginClipRegion { rect } => target_cmd.push_clip(*rect),
+                    PaintCommand::EndClipRegion => target_cmd.pop_clip(),
                 }
             }
 
         }).expect("Failed to paint");
+    }
+
+    fn end_clip_region(&mut self) {
+        self.commands.push(PaintCommand::EndClipRegion);
     }
 
     fn handle_resize(&mut self, window: &mut winit::window::Window) {

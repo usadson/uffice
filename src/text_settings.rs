@@ -6,7 +6,7 @@ use std::{rc::Rc, cell::RefCell};
 use roxmltree as xml;
 use sfml::{graphics::{Color, TextStyle, Font, Text}, system::Vector2f};
 
-use crate::{word_processing::{HALF_POINT, TWELFTEENTH_POINT}, color_parser, WORD_PROCESSING_XML_NAMESPACE, style::StyleManager, wp::layout::LineLayout, fonts::FontManager};
+use crate::{word_processing::{HALF_POINT, TWELFTEENTH_POINT}, color_parser, WORD_PROCESSING_XML_NAMESPACE, style::StyleManager, wp::layout::LineLayout, fonts::FontManager, gui::painter::FontWeight};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Size {
@@ -332,6 +332,21 @@ impl TextSettings {
         if let Some(value) = node.attribute((WORD_PROCESSING_XML_NAMESPACE, "hanging")) {
             self.indentation_hanging = Some(value.parse().unwrap());
         }
+    }
+
+    pub fn font_weight(&self) -> FontWeight {
+        if self.bold == Some(true) {
+            println!("BOLD");
+            FontWeight::Bold
+        } else {
+            println!("REGULAR");
+            FontWeight::Regular
+        }
+    }
+
+    pub fn brush(&self) -> crate::gui::Brush {
+        let color = self.color.unwrap_or(Color::BLACK);
+        crate::gui::Brush::SolidColor(crate::gui::Color::from_rgba(color.r, color.g, color.b, color.a))
     }
 
 }

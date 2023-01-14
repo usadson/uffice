@@ -30,6 +30,7 @@ use crate::gui::Size;
 use crate::gui::animate::Animator;
 use crate::gui::animate::Zoomer;
 use crate::gui::painter::Painter;
+use crate::gui::painter::PainterCache;
 use crate::gui::scroll::Scroller;
 use crate::gui::view::View;
 use crate::gui::view::document_view::VERTICAL_PAGE_MARGIN;
@@ -461,9 +462,7 @@ unsafe impl Send for TabId {}
 
 pub enum TabState {
     Loading,
-    Ready {
-        view: View,
-    },
+    Ready,
 }
 
 enum TabEvent {
@@ -537,13 +536,13 @@ impl Tab {
     }
 
     pub fn on_became_ready(&mut self) {
-
+        self.state = TabState::Ready;
     }
 
     fn on_paint(&self, event: &crate::gui::app::PaintEvent) {
         assert!(event.painter.try_borrow_mut().is_ok(), "Failed to painter borrow as mutable; we can never send the PaintEvent to the tab!");
 
-        let size = event.window.inner_size();
+        let size = event.window.inner_size().to_logical(event.window.scale_factor());
         self.tab_event_sender.send(TabEvent::Paint {
             painter: event.painter.clone(),
             window_size: Size::new(size.width, size.height),
@@ -610,7 +609,9 @@ impl crate::gui::app::GuiApp for App {
         assert!(event.painter.try_borrow_mut().is_ok(), "Failed to painter borrow as mutable; cannot paint App");
 
         if let Some(current_tab_id) = self.current_visible_tab {
+            event.painter.borrow_mut().switch_cache(PainterCache::Document(current_tab_id.0));
             self.tabs.get_mut(&current_tab_id).unwrap().on_paint(&event);
+            event.painter.borrow_mut().switch_cache(PainterCache::UI);
         }
     }
 

@@ -125,6 +125,17 @@ impl Node {
         }
     }
 
+    /// Run the `callback` function recursively on itself and it's descendants.
+    pub fn apply_recursively_mut(&mut self, callback: &mut dyn FnMut(&mut Node, usize), depth: usize) {
+        callback(self, depth);
+
+        if let Some(children) = &mut self.children {
+            for child in children {
+                child.borrow_mut().apply_recursively_mut(callback, depth + 1);
+            }
+        }
+    }
+
     pub fn find_document(&self) -> Rc<RefCell<Node>> {
         if let NodeData::Document(..) = &self.data {
             panic!("find_document whilst we are a document!");

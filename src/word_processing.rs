@@ -26,9 +26,9 @@ use crate::{
     }, fonts::FontManager
 };
 
-const CORE_FACTOR: f32 = 3.0f32;
+const CORE_FACTOR: f32 = 1.0f32;
 pub const TWELFTEENTH_POINT: f32 = 1f32 / 12.0 * CORE_FACTOR;
-pub const HALF_POINT: f32 = 1f32 * CORE_FACTOR;
+pub const HALF_POINT: f32 = 0.5 * CORE_FACTOR;
 const LINE_SPACING: f32 = 6.0 * CORE_FACTOR;
 
 struct Context<'a> {
