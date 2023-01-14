@@ -346,10 +346,8 @@ impl TextSettings {
 
     pub fn font_weight(&self) -> FontWeight {
         if self.bold == Some(true) {
-            println!("BOLD");
             FontWeight::Bold
         } else {
-            println!("REGULAR");
             FontWeight::Regular
         }
     }

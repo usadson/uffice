@@ -161,6 +161,14 @@ pub enum AppEvent {
 
     /// A certain tab was loading and is now ready.
     TabBecameReady(TabId),
+
+    /// A certain tab was painted.
+    TabPainted {
+        tab_id: TabId,
+
+        /// The total height of the content in pixels.
+        total_content_height: f32,
+    }
 }
 
 unsafe impl Send for AppEvent {}

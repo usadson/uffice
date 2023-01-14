@@ -1,25 +1,26 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use sfml::{graphics::{RenderWindow, RectangleShape, Shape, RenderTarget, Transformable, Rect, Color}, system::Vector2f};
+use sfml::{graphics::{RenderWindow, RectangleShape, Shape, RenderTarget, Transformable, Rect}, system::Vector2f};
 use uffice_lib::math;
+use winit::window::Window;
 
-use super::animate::Animator;
+use super::{animate::Animator, painter::Painter, Brush, Color, Position, Size};
 
 pub const SCROLL_BAR_WIDTH: f32 = 20.0;
 
 /// The color of the scroll bar below the scroll thumb.
-const SCROLL_BAR_BACKGROUND_COLOR: Color = Color::rgb(0xBD, 0xBD, 0xBD);
+const SCROLL_BAR_BACKGROUND_COLOR: Color = Color::from_rgb(0xBD, 0xBD, 0xBD);
 
 /// The color of the thumb of the scrollbar when it's neither hovered nor
 /// clicked.
-const SCROLL_BAR_THUMB_DEFAULT_COLOR: Color = Color::rgb(0x67, 0x3A, 0xB7);
+const SCROLL_BAR_THUMB_DEFAULT_COLOR: Color = Color::from_rgb(0x67, 0x3A, 0xB7);
 
 /// The color of the thumb of the scrollbar when it's hovered over.
-const SCROLL_BAR_THUMB_HOVER_COLOR: Color = Color::rgb(0x65, 0x32, 0xBC);
+const SCROLL_BAR_THUMB_HOVER_COLOR: Color = Color::from_rgb(0x65, 0x32, 0xBC);
 
 /// The color of the thumb of the scrollbar when it's being clicked on.
-const SCROLL_BAR_THUMB_CLICK_COLOR: Color = Color::rgb(0x60, 0x2B, 0xBC);
+const SCROLL_BAR_THUMB_CLICK_COLOR: Color = Color::from_rgb(0x60, 0x2B, 0xBC);
 
 pub struct Scroller {
     value: f32,
@@ -52,36 +53,39 @@ impl Scroller {
     }
 
     pub fn scroll(&mut self, value: f32) {
-        self.increase_thumb_position(-value / 100.0);
+        self.increase_thumb_position(-value);
     }
 
-    pub fn draw(&mut self, shape: &mut RectangleShape, parent: &mut RenderWindow) {
-        let window_size = parent.size();
-        self.window_height = window_size.y as f32;
+    pub fn draw(&mut self, _shape: &mut RectangleShape, _parent: &mut RenderWindow) {
+    }
 
-        let full_page_scrolls = self.content_height / window_size.y as f32;
-        let scroll_bar_height = (window_size.y as f32 / full_page_scrolls).ceil();
-        let scroll_y = (window_size.y as f32 - scroll_bar_height) * Scroller::bound_position(self.value + self.value_increase);
+    pub fn paint(&mut self, window: &mut Window, painter: &mut dyn Painter) {
+        let window_size = window.inner_size().to_logical::<f32>(window.scale_factor());
+        self.window_height = window_size.height;
 
-        shape.set_fill_color(SCROLL_BAR_BACKGROUND_COLOR);
-        shape.set_size(Vector2f::new(SCROLL_BAR_WIDTH, window_size.y as f32));
-        shape.set_position(Vector2f::new(window_size.x as f32 - SCROLL_BAR_WIDTH, 0.0));
-        self.bar_rect = shape.global_bounds();
-        parent.draw(shape);
+        let full_page_scrolls = self.content_height / window_size.height as f32;
+        let scroll_bar_height = (window_size.height as f32 / full_page_scrolls).ceil();
+        let scroll_y = (window_size.height as f32 - scroll_bar_height) * Scroller::bound_position(self.value + self.value_increase);
 
-        shape.set_fill_color({
-            if self.is_pressed {
-                SCROLL_BAR_THUMB_CLICK_COLOR
-            } else if self.is_hovered {
-                SCROLL_BAR_THUMB_HOVER_COLOR
-            } else {
-                SCROLL_BAR_THUMB_DEFAULT_COLOR
-            }
-        });
-        shape.set_size(Vector2f::new(SCROLL_BAR_WIDTH, scroll_bar_height));
-        shape.set_position(Vector2f::new(window_size.x as f32 - SCROLL_BAR_WIDTH, scroll_y));
-        self.thumb_rect = shape.global_bounds();
-        parent.draw(shape);
+        let bar_rect = super::Rect::from_position_and_size(
+            Position::new(window_size.width - SCROLL_BAR_WIDTH, 0.0),
+            Size::new(SCROLL_BAR_WIDTH, window_size.height)
+        );
+        painter.paint_rect(Brush::SolidColor(SCROLL_BAR_BACKGROUND_COLOR), bar_rect);
+
+        let thumb_color = if self.is_pressed {
+            SCROLL_BAR_THUMB_CLICK_COLOR
+        } else if self.is_hovered {
+            SCROLL_BAR_THUMB_HOVER_COLOR
+        } else {
+            SCROLL_BAR_THUMB_DEFAULT_COLOR
+        };
+
+        let thumb_rect = super::Rect::from_position_and_size(
+            Position::new(bar_rect.left, scroll_y),
+            Size::new(SCROLL_BAR_WIDTH, scroll_bar_height)
+        );
+        painter.paint_rect(Brush::SolidColor(thumb_color), thumb_rect);
     }
 
     pub fn apply_mouse_offset(&mut self, value: f32) {

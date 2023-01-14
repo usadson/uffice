@@ -33,7 +33,7 @@ use crate::{
     application::load_archive_file_to_string,
     relationships::Relationships,
     style::StyleManager,
-    text_settings::Position, gui::{painter::{FontSpecification, TextCalculator}, Rect, Size},
+    gui::{painter::{FontSpecification, TextCalculator}, Rect, Size, Position},
 };
 
 use super::{
@@ -54,6 +54,8 @@ pub struct DocumentView {
     view_data: ViewData,
 
     document: Option<Rc<RefCell<crate::wp::Node>>>,
+
+    page_rects: Vec<Rect<f32>>,
 
     content_rect: sfml::graphics::Rect<f32>,
     page_textures: Vec<Rc<RefCell<RenderTexture>>>,
@@ -130,6 +132,7 @@ impl DocumentView {
 
         let mut view = Self {
             view_data: ViewData {  },
+            page_rects: Vec::new(),
             content_rect: Default::default(),
             document: Some(document),
             page_textures: page_textures.render_targets
@@ -221,6 +224,8 @@ impl DocumentView {
                     });
                 }
 
+                self.page_rects.push(Rect::from_position_and_size(Position::new(start_x, start_y), page_size));
+
                 start_y
             }).collect::<Vec<f32>>();
 
@@ -250,8 +255,6 @@ impl DocumentView {
 
                 match &node.data {
                     wp::NodeData::TextPart(part) => {
-                        println!("Text \"{}\" @ {:?}", part.text, position);
-
                         let text_size = node.text_settings.non_complex_text_size.unwrap() as f32 * HALF_POINT * event.zoom;
                         let font_family_name = node.text_settings.font.clone().unwrap_or(String::from("Calibri"));
                         event.painter.select_font(FontSpecification::new(&font_family_name, text_size, node.text_settings.font_weight())).unwrap();
@@ -292,25 +295,13 @@ impl DocumentView {
 }
 
 impl super::ViewImpl for DocumentView {
-    /// Calculates the height of all the pages, plus some vertical margins and
-    /// gaps between the pages.
-    ///
     /// This function is used so the scroller knows how much we're able to
     /// scroll.
     fn calculate_content_height(&self) -> f32 {
-        // Top and bottom gaps above and below the pages.
-        let mut height = VERTICAL_PAGE_MARGIN * 2.0;
-
-        // The gaps between the pages.
-        if self.page_textures.len() > 0 {
-            height += (self.page_textures.len() - 1) as f32 * VERTICAL_PAGE_GAP;
+        match self.page_rects.last() {
+            Some(page_rect) => page_rect.bottom,
+            None => 0.0
         }
-
-        for page_tex in &self.page_textures {
-            height += page_tex.as_ref().borrow().size().y as f32;
-        }
-
-        height
     }
 
     fn check_interactable_for_mouse(&self, mouse_position: Vector2f, callback: &mut dyn FnMut(&mut crate::wp::Node, crate::text_settings::Position)) -> bool {
@@ -321,7 +312,7 @@ impl super::ViewImpl for DocumentView {
         let doc = self.document.as_ref().unwrap();
         let mut document = doc.borrow_mut();
 
-        let mouse_position = Position::new(mouse_position.x as u32, mouse_position.y as u32);
+        let mouse_position = crate::text_settings::Position::new(mouse_position.x as u32, mouse_position.y as u32);
         document.hit_test(mouse_position, &mut |node| {
             callback(node, mouse_position);
         })

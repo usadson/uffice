@@ -17,7 +17,7 @@ pub struct PaintEvent<'a> {
 }
 
 pub trait GuiApp {
-    fn on_event(&mut self, window: &mut Window, event: AppEvent);
+    fn on_event(&mut self, window: &mut Window, event: winit::event::Event<AppEvent>);
 
     fn paint(&mut self, event: PaintEvent);
 
@@ -128,12 +128,13 @@ pub fn run<F>(app_creator: F)
 
                 app_data.painter().display();
             },
-            Event::UserEvent(app_event) => match &app_event {
-                AppEvent::PainterRequest => app.receive_painter(app_data._painter.clone()),
-                _ => app.on_event(&mut window, app_event)
+            Event::UserEvent(ref app_event) => if app_event == &AppEvent::PainterRequest {
+                app.receive_painter(app_data._painter.clone());
             },
             _ => ()
         }
+
+        app.on_event(&mut window, event);
     });
 }
 

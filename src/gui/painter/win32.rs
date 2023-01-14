@@ -73,10 +73,10 @@ impl From<Rect<f32>> for mltg::Rect<f32> {
 impl From<Color> for mltg::Rgba<f32> {
     fn from(value: Color) -> Self {
         Self::new(
-            value.red() as f32 / 1.0,
-            value.green() as f32 / 1.0,
-            value.blue() as f32 / 1.0,
-            value.alpha() as f32 / 1.0
+            value.red() as f32 / 255.0,
+            value.green() as f32 / 255.0,
+            value.blue() as f32 / 255.0,
+            value.alpha() as f32 / 255.0
         )
     }
 }

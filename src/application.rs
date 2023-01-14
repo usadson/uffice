@@ -26,6 +26,8 @@ use sfml::window::*;
 
 use notify::{Watcher, RecursiveMode};
 use windows::Win32::System::Com::CoInitialize;
+use winit::event::DeviceEvent;
+use winit::event::MouseScrollDelta;
 use winit::event_loop::EventLoopProxy;
 
 use crate::gui::AppEvent;
@@ -477,20 +479,30 @@ enum TabEvent {
     Paint {
         painter: Arc<RefCell<dyn Painter>>,
         window_size: Size<u32>,
+
+        start_y: f32,
+        zoom: f32,
     },
 }
 
 unsafe impl Send for TabEvent {}
 
+pub struct TabFinishPaintInfo {
+    content_height: f32
+}
+
 pub struct Tab {
     state: TabState,
     path: PathBuf,
+
+    scroller: Scroller,
+    zoomer: Zoomer,
 
     event_loop_proxy: EventLoopProxy<AppEvent>,
     tab_event_sender: Sender<TabEvent>,
 
     /// Sent when the event was finished.
-    finished_paint_receiver: Receiver<()>,
+    finished_paint_receiver: Receiver<TabFinishPaintInfo>,
 }
 
 impl Tab {
@@ -523,7 +535,7 @@ impl Tab {
                             painter.text_calculator()
                         };
                         assert!(painter.try_borrow_mut().is_ok(), "Borrow painter as mutable failed after getting text calculator?");
-                        finished_paint_sender.send(()).unwrap();
+                        finished_paint_sender.send(TabFinishPaintInfo { content_height: 0.0 }).unwrap();
 
                         let mut text_calculator = text_calculator.as_ref().borrow_mut();
                         view = Some(View::Document(crate::gui::view::document_view::DocumentView::new(&path_str, &mut *text_calculator)));
@@ -531,7 +543,9 @@ impl Tab {
                         assert!(painter.try_borrow_mut().is_ok(), "Borrow painter as mutable failed after getting text calculator?");
                         proxy.send_event(AppEvent::TabBecameReady(id)).unwrap();
                     }
-                    TabEvent::Paint{ painter, window_size } => {
+                    TabEvent::Paint{ painter, window_size, start_y, zoom } => {
+                        let mut content_height = 0.0;
+
                         // Scope this so the painter borrow is dropped before
                         // sending the finish message.
                         if let Some(view) = &mut view {
@@ -539,15 +553,23 @@ impl Tab {
                             view.handle_event(&mut crate::gui::view::Event::Paint(crate::gui::view::PaintEvent {
                                 opaqueness: 1.0,
                                 painter,
-                                start_y: 10.0,
+                                start_y,
                                 window_size,
-                                zoom: 0.7
+                                zoom
                             }));
 
+                            proxy.send_event(AppEvent::TabPainted{
+                                tab_id: id,
+                                total_content_height: view.calculate_content_height()
+                            }).unwrap();
+
+                            content_height = view.calculate_content_height();
                         }
 
                         assert!(painter.try_borrow_mut().is_ok(), "Borrow painter as mutable failed after finish paint?");
-                        finished_paint_sender.send(()).unwrap();
+                        finished_paint_sender.send(TabFinishPaintInfo{
+                            content_height
+                        }).unwrap();
                     }
                 }
             }
@@ -559,6 +581,8 @@ impl Tab {
         Self {
             state: TabState::Loading,
             path,
+            scroller: Scroller::new(),
+            zoomer: Zoomer::new(),
             event_loop_proxy,
             tab_event_sender,
             finished_paint_receiver,
@@ -569,17 +593,35 @@ impl Tab {
         self.state = TabState::Ready;
     }
 
-    fn on_paint(&self, event: &crate::gui::app::PaintEvent) {
+    pub fn on_tab_painted(&mut self, total_content_height: f32) {
+        self.scroller.content_height = total_content_height;
+    }
+
+    fn on_paint(&mut self, event: &crate::gui::app::PaintEvent) {
         assert!(event.painter.try_borrow_mut().is_ok(), "Failed to painter borrow as mutable; we can never send the PaintEvent to the tab!");
 
         let size = event.window.inner_size().to_logical(event.window.scale_factor());
+        let zoom_level = self.zoomer.zoom_factor();
         self.tab_event_sender.send(TabEvent::Paint {
             painter: event.painter.clone(),
             window_size: Size::new(size.width, size.height),
+            start_y: (VERTICAL_PAGE_MARGIN - self.scroller.content_height * self.scroller.position()) * zoom_level,
+            zoom: zoom_level
         }).unwrap();
 
-        self.finished_paint_receiver.recv().unwrap();
+        self.scroller.content_height = self.finished_paint_receiver.recv().unwrap().content_height;
         assert!(event.painter.try_borrow_mut().is_ok(), "Failed to painter borrow as mutable while finish_paint was received!");
+    }
+
+    /// Returns whether or not to repaint.
+    pub fn on_scroll(&mut self, delta: MouseScrollDelta) -> bool {
+        if let MouseScrollDelta::LineDelta(_left, top) = delta {
+            self.scroller.scroll(top);
+
+            return true;
+        }
+
+        return false;
     }
 }
 
@@ -619,11 +661,8 @@ impl App {
 
         self.current_visible_tab = Some(tab_id);
     }
-}
 
-impl crate::gui::app::GuiApp for App {
-
-    fn on_event(&mut self, window: &mut winit::window::Window, event: AppEvent) {
+    fn handle_user_event(&mut self, window: &mut winit::window::Window, event: AppEvent) {
         match event {
             AppEvent::TabBecameReady(tab_id) => {
                 self.tabs.get_mut(&tab_id).unwrap().on_became_ready();
@@ -633,7 +672,34 @@ impl crate::gui::app::GuiApp for App {
                 }
             }
 
+            AppEvent::TabPainted { tab_id, total_content_height } => {
+                self.tabs.get_mut(&tab_id).unwrap().on_tab_painted(total_content_height);
+            }
+
             AppEvent::PainterRequest => ()
+        }
+    }
+}
+
+impl crate::gui::app::GuiApp for App {
+
+    fn on_event(&mut self, window: &mut winit::window::Window, event: winit::event::Event<AppEvent>) {
+        use winit::event::Event;
+        match event {
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseWheel { delta }, ..
+            } => {
+                if let Some(current_tab_id) = self.current_visible_tab {
+                    let should_scroll = self.tabs.get_mut(&current_tab_id).unwrap().on_scroll(delta);
+                    if should_scroll {
+                        window.request_redraw();
+                    }
+                }
+            }
+
+            Event::UserEvent(app_event) => self.handle_user_event(window, app_event),
+
+            _ => ()
         }
     }
 
@@ -642,11 +708,18 @@ impl crate::gui::app::GuiApp for App {
 
         if let Some(current_tab_id) = self.current_visible_tab {
             event.painter.as_ref().borrow_mut().switch_cache(PainterCache::Document(current_tab_id.0));
-            self.tabs.get_mut(&current_tab_id).unwrap().on_paint(&event);
-            event.painter.as_ref().borrow_mut().switch_cache(PainterCache::UI);
+
+            let current_tab = self.tabs.get_mut(&current_tab_id).unwrap();
+            current_tab.on_paint(&event);
+
+            let mut painter = event.painter.as_ref().borrow_mut();
+            painter.switch_cache(PainterCache::UI);
+
+            current_tab.scroller.paint(event.window, &mut *painter);
         }
     }
 
+    /// This function is called in response to a `AppEvent::PainterRequest`.
     fn receive_painter(&mut self, painter: Arc<RefCell<dyn Painter>>) {
         for tab in self.tabs.values() {
             if tab.state == TabState::Loading {
