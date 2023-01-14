@@ -1,7 +1,7 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::default;
+use std::{sync::{Arc, Mutex}, cell::RefCell, rc::Rc};
 
 use super::{Brush, Rect, Position, Size};
 
@@ -11,8 +11,8 @@ pub mod win32;
 #[derive(Debug)]
 pub enum FontSelectionError {
     /// Failed to access the resource associated with the font.
-
     CannotAccessResource,
+
     /// Failed to find the font with the specified options.
     NotFound,
 }
@@ -69,6 +69,17 @@ pub enum PainterCache {
     Document(usize),
 }
 
+/// Calculate properties about text in order to do layout without the need of
+/// claiming the Painter. This allows us to do layout in the background while
+/// the main UI thread can still render and run the main loop.
+pub trait TextCalculator {
+
+    fn calculate_text_size(&mut self, font: FontSpecification, text: &str) -> Result<Size<f32>, FontSelectionError>;
+
+    fn line_spacing(&mut self, font: FontSpecification) -> Result<f32, FontSelectionError>;
+
+}
+
 /// Paint on a window using specific functions. The underlying implementation
 /// might schedule paint tasks, so the commands might not get processed
 /// immediately.
@@ -112,5 +123,8 @@ pub trait Painter {
     /// Switches to a certain cache. When it is not created or cleared, it will
     /// be allocated for you.
     fn switch_cache(&mut self, cache: PainterCache);
+
+    /// Get the sharable text calculator.
+    fn text_calculator(&mut self) -> Rc<RefCell<dyn TextCalculator>>;
 
 }

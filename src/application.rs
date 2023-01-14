@@ -1,12 +1,14 @@
 // Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::Receiver;
@@ -23,6 +25,7 @@ use sfml::system::Vector2f;
 use sfml::window::*;
 
 use notify::{Watcher, RecursiveMode};
+use windows::Win32::System::Com::CoInitialize;
 use winit::event_loop::EventLoopProxy;
 
 use crate::gui::AppEvent;
@@ -31,6 +34,7 @@ use crate::gui::animate::Animator;
 use crate::gui::animate::Zoomer;
 use crate::gui::painter::Painter;
 use crate::gui::painter::PainterCache;
+use crate::gui::painter::TextCalculator;
 use crate::gui::scroll::Scroller;
 use crate::gui::view::View;
 use crate::gui::view::document_view::VERTICAL_PAGE_MARGIN;
@@ -311,13 +315,13 @@ impl<'a> Application<'a> {
             if self.is_draw_invalidated.swap(false, Ordering::Relaxed) {
                 self.display_loading_screen();
 
-                let view = crate::gui::view::View::Document(
-                    crate::gui::view::document_view::DocumentView::new(&self.archive_path)
-                );
+                // let view = crate::gui::view::View::Document(
+                //     crate::gui::view::document_view::DocumentView::new(&self.archive_path)
+                // );
 
-                self.scroller.content_height = view.calculate_content_height() * factor;
+                // self.scroller.content_height = view.calculate_content_height() * factor;
 
-                self.view = Some(view);
+                // self.view = Some(view);
 
                 page_introduction_animator.reset();
             }
@@ -460,12 +464,16 @@ pub struct TabId(usize);
 unsafe impl Sync for TabId {}
 unsafe impl Send for TabId {}
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum TabState {
     Loading,
     Ready,
 }
 
 enum TabEvent {
+    Layout {
+        painter: Arc<RefCell<dyn Painter>>,
+    },
     Paint {
         painter: Arc<RefCell<dyn Painter>>,
         window_size: Size<u32>,
@@ -496,15 +504,37 @@ impl Tab {
             let proxy: EventLoopProxy<AppEvent> = proxy_rx.recv().unwrap();
             drop(proxy_rx);
 
-            let mut view = View::Document(crate::gui::view::document_view::DocumentView::new(&path_str));
-            proxy.send_event(AppEvent::TabBecameReady(id)).unwrap();
+            let mut view = None;
+            proxy.send_event(AppEvent::PainterRequest).unwrap();
+
+            unsafe {
+                CoInitialize(None).expect("Failed to initialize COM, this is needed because this is another thread. Maybe we could look into MTA using roapi?");
+            }
 
             for event in tab_event_receiver {
                 match event {
+                    TabEvent::Layout { painter } => {
+                        if view.is_some() {
+                            continue;
+                        }
+
+                        let text_calculator = {
+                            let painter = &mut *painter.as_ref().borrow_mut();
+                            painter.text_calculator()
+                        };
+                        assert!(painter.try_borrow_mut().is_ok(), "Borrow painter as mutable failed after getting text calculator?");
+                        finished_paint_sender.send(()).unwrap();
+
+                        let mut text_calculator = text_calculator.as_ref().borrow_mut();
+                        view = Some(View::Document(crate::gui::view::document_view::DocumentView::new(&path_str, &mut *text_calculator)));
+
+                        assert!(painter.try_borrow_mut().is_ok(), "Borrow painter as mutable failed after getting text calculator?");
+                        proxy.send_event(AppEvent::TabBecameReady(id)).unwrap();
+                    }
                     TabEvent::Paint{ painter, window_size } => {
                         // Scope this so the painter borrow is dropped before
                         // sending the finish message.
-                        {
+                        if let Some(view) = &mut view {
                             let painter = &mut *painter.as_ref().borrow_mut();
                             view.handle_event(&mut crate::gui::view::Event::Paint(crate::gui::view::PaintEvent {
                                 opaqueness: 1.0,
@@ -602,6 +632,8 @@ impl crate::gui::app::GuiApp for App {
                     window.request_redraw();
                 }
             }
+
+            AppEvent::PainterRequest => ()
         }
     }
 
@@ -609,9 +641,18 @@ impl crate::gui::app::GuiApp for App {
         assert!(event.painter.try_borrow_mut().is_ok(), "Failed to painter borrow as mutable; cannot paint App");
 
         if let Some(current_tab_id) = self.current_visible_tab {
-            event.painter.borrow_mut().switch_cache(PainterCache::Document(current_tab_id.0));
+            event.painter.as_ref().borrow_mut().switch_cache(PainterCache::Document(current_tab_id.0));
             self.tabs.get_mut(&current_tab_id).unwrap().on_paint(&event);
-            event.painter.borrow_mut().switch_cache(PainterCache::UI);
+            event.painter.as_ref().borrow_mut().switch_cache(PainterCache::UI);
+        }
+    }
+
+    fn receive_painter(&mut self, painter: Arc<RefCell<dyn Painter>>) {
+        for tab in self.tabs.values() {
+            if tab.state == TabState::Loading {
+                tab.tab_event_sender.send(TabEvent::Layout { painter: painter.clone() }).unwrap();
+                tab.finished_paint_receiver.recv().unwrap();
+            }
         }
     }
 

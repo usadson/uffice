@@ -1,7 +1,7 @@
 // Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use crate::relationships::{Relationship, Relationships};
+use crate::{relationships::{Relationship, Relationships}, gui::Size};
 use roxmltree as xml;
 use sfml::{system::Vector2f, graphics::{Transformable, RenderTarget}};
 use std::{cell::RefCell, rc::Rc};
@@ -31,15 +31,15 @@ impl DrawingObject {
         object
     }
 
-    pub fn size(&self) -> Vector2f {
+    pub fn size(&self) -> Size<f32> {
         match self.extent {
             Some(extent) => {
                 // 20.1.2.1 EMU Unit of Measurement
                 // 1 emu = 1/914400 inch
-                Vector2f {
-                    x: extent.width as f32 * crate::word_processing::HALF_POINT * 72.0 / 914400.0,
-                    y: extent.height as f32 * crate::word_processing::HALF_POINT * 72.0 / 914400.0,
-                }
+                Size::new(
+                    extent.width as f32 * crate::word_processing::HALF_POINT * 72.0 / 914400.0,
+                    extent.height as f32 * crate::word_processing::HALF_POINT * 72.0 / 914400.0,
+                )
             }
             None => Default::default(),
         }
@@ -62,8 +62,8 @@ impl DrawingObject {
                 let rect = sprite.global_bounds();
                 let size = self.size();
                 sprite.set_scale((
-                    size.x / rect.width,
-                    size.y / rect.height
+                    size.width() / rect.width,
+                    size.height() / rect.height
                 ));
 
                 sprite.set_position(position);

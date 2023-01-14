@@ -6,7 +6,6 @@ use uffice_lib::namespaces::XMLNS_RELATIONSHIPS;
 use unicode_segmentation::UnicodeSegmentation;
 
 use std::{
-    path::Path,
     cell::{RefCell, RefMut},
     rc::Rc,
 };
@@ -23,7 +22,7 @@ use crate::{
     relationships::Relationships,
     wp::{
         Document, Node, painter::{Painter, PageRenderTargets}, numbering
-    }, fonts::FontManager
+    }, gui::painter::{TextCalculator, FontSpecification},
 };
 
 const CORE_FACTOR: f32 = 1.0f32;
@@ -35,7 +34,7 @@ struct Context<'a> {
     #[allow(dead_code)]
     document: &'a xml::Document<'a>,
 
-    font_manager: FontManager,
+    text_calculator: &'a mut dyn gui::painter::TextCalculator,
 
     document_relationships: &'a Relationships,
     style_manager: &'a StyleManager,
@@ -96,7 +95,8 @@ pub type DocumentResult = (wp::painter::PageRenderTargets, Rc<RefCell<Node>>);
 pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
                         document_relationships: &Relationships,
                         numbering_manager: wp::numbering::NumberingManager,
-                        document_properties: wp::document_properties::DocumentProperties) -> DocumentResult {
+                        document_properties: wp::document_properties::DocumentProperties,
+                        text_calculator: &mut dyn gui::painter::TextCalculator) -> DocumentResult {
     let text_settings = style_manager.default_text_settings();
     //text_settings.font = Some(String::from("Calibri"));
 
@@ -131,7 +131,7 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
 
     let mut context = Context{
         document,
-        font_manager: FontManager::new(),
+        text_calculator,
 
         document_relationships,
         style_manager,
@@ -150,19 +150,19 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
         }
     }
 
-    let mut font_manager = context.font_manager;
+    // let mut font_manager = context.text_calculator;
 
     let mut render_targets = PageRenderTargets{ render_targets: Vec::new() };
-    {
-        let mut painter = Painter {
-            pages: &mut render_targets,
-            page_size: render_size,
-            font_manager: &mut font_manager,
-            last_texture_index: None,
-        };
+    // {
+    //     let mut painter = Painter {
+    //         pages: &mut render_targets,
+    //         page_size: render_size,
+    //         font_manager: &mut font_manager,
+    //         last_texture_index: None,
+    //     };
 
-        draw_document(doc.borrow_mut(), &mut painter);
-    }
+    //     draw_document(doc.borrow_mut(), &mut painter);
+    // }
 
     (render_targets, doc.clone())
 }
@@ -185,7 +185,7 @@ fn process_drawing_element(context: &mut Context, parent: Rc<RefCell<Node>>,
                 inline_drawing.borrow_mut().size = size;
 
                 let mut parent = parent.borrow_mut();
-                assert_eq!(parent.size, Vector2f::new(0.0, 0.0));
+                assert_eq!(parent.size, gui::Size::new(0.0, 0.0));
                 parent.size = size;
             }
 
@@ -274,8 +274,8 @@ fn process_pragraph_element(context: &mut Context,
         let pref = paragraph.as_ref().borrow();
         if let Some(numbering) = pref.text_settings.numbering.clone() {
             drop(pref);
-            let node = numbering.create_node(paragraph.clone(), &mut line_layout, &mut context.font_manager);
-            position.x += node.as_ref().borrow().size.x;
+            let node = numbering.create_node(paragraph.clone(), &mut line_layout, context.text_calculator);
+            position.x += node.as_ref().borrow().size.width();
             // println!("Numbering Width: {}", node.as_ref().borrow().size.x);
 
 
@@ -313,22 +313,29 @@ fn process_pragraph_element(context: &mut Context,
 
     let mut paragraph = paragraph.borrow_mut();
 
-    let font = context.font_manager.load_font(&paragraph.text_settings);
-    let text = paragraph.text_settings.create_text(&font);
+    // let font = context.font_manager.load_font(&paragraph.text_settings);
+    // let text = paragraph.text_settings.create_text(&font);
+    let family_name = paragraph.text_settings.font.clone().unwrap_or(String::from("Calibri"));
+    let font_spec = FontSpecification::new(
+        &family_name,
+        paragraph.text_settings.non_complex_text_size.unwrap() as f32 * HALF_POINT,
+        paragraph.text_settings.font_weight(),
+    );
 
     // The cursor is probably somewhere in the middle of the line.
     // We should put it at the next line.
     //
     // NOTE: This isn't line/paragraph spacing; see below.
     if position != original_position {
-        position.y += text.global_bounds().height;
+        //position.y += text.global_bounds().height;
+        // TODO?
     }
 
     let line_spacing;
     if line_layout.line_height() > 0.0 {
         line_spacing = line_layout.line_height();
     } else {
-        line_spacing = text.line_spacing() as f32 * HALF_POINT;
+        line_spacing = context.text_calculator.line_spacing(font_spec).unwrap() as f32 * HALF_POINT;
     }
 
     let paragraph_spacing = paragraph.text_settings.spacing_below_paragraph.unwrap_or(0.0);
@@ -339,7 +346,8 @@ fn process_pragraph_element(context: &mut Context,
     // println!("│  ├─ Advancing {}  +  {}", line_spacing, paragraph_spacing);
     position.y += line_spacing + paragraph_spacing;
 
-    paragraph.size = position - original_position;
+    let diff = position - original_position;
+    paragraph.size = gui::Size::new(diff.x, diff.y);
 
     position
 }
@@ -555,12 +563,7 @@ fn process_text_element(context: &mut Context,
         if child.node_type() == xml::NodeType::Text {
             let text_string = child.text().unwrap();
             // println!("│  │  │  ├─ Text: \"{}\"", text_string);
-
-            let font = context.font_manager.load_font(&text_node.as_ref().borrow().text_settings);
-
-            let mut text = text_node.as_ref().borrow().text_settings.create_text(&font);
-
-            position = process_text_element_text(text_node.clone(), line_layout, &mut text, text_string, position);
+            position = process_text_element_text(text_node.clone(), line_layout, context.text_calculator, text_string, position);
         }
     }
 
@@ -570,18 +573,15 @@ fn process_text_element(context: &mut Context,
 fn process_text_element_in_instructed_field(context: &mut Context,
         parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout,
         _position: Vector2f, field: &wp::instructions::Field) -> Vector2f {
-    append_text_element(&field.resolve_to_string(&parent), parent, line_layout, &mut context.font_manager)
+    append_text_element(&field.resolve_to_string(&parent), parent, line_layout, context.text_calculator)
 }
 
-pub fn append_text_element(text_string: &str, parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, font_manager: &mut FontManager) -> Vector2f {
-    let font = font_manager.load_font(&parent.as_ref().borrow().text_settings);
-    let mut text = parent.as_ref().borrow().text_settings.create_text(&font);
-
+pub fn append_text_element(text_string: &str, parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator) -> Vector2f {
     let position = parent.as_ref().borrow().position;
-    process_text_element_text(parent, line_layout, &mut text, text_string, position)
+    process_text_element_text(parent, line_layout, text_calculator, text_string, position)
 }
 
-pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, text: &mut Text, text_string: &str, original_position: Vector2f) -> Vector2f {
+pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator, text_string: &str, original_position: Vector2f) -> Vector2f {
     #[derive(Debug)]
     enum LineStopReason {
         /// The end of the text was reached. This could also very well mean the
@@ -602,6 +602,14 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
 
     let mut page_number = parent.as_ref().borrow().page_last;
 
+    let text_settings = parent.borrow().text_settings.clone();
+    let family_name = text_settings.font.clone().unwrap_or(String::from("Calibri"));
+    let font_spec = FontSpecification::new(
+        &family_name, text_settings.non_complex_text_size.unwrap() as f32 * HALF_POINT, text_settings.font_weight(),
+    );
+
+    let line_spacing = text_calculator.line_spacing(font_spec).unwrap();
+
     let mut iter = UnicodeSegmentation::split_word_bound_indices(text_string).peekable();
     while let Some((index, word)) = iter.next() {
         let start;
@@ -614,14 +622,14 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
         }
 
         let mut line = &text_string[start..(index + word.bytes().count())];
-        text.set_string(line);
-        let mut width = text.local_bounds().width;
+        let mut text_size = text_calculator.calculate_text_size(font_spec, line).unwrap();
+        let mut width = text_size.width();
 
         let max_width_fitting_on_page = line_layout.page_horizontal_end - position.x;
         println!("path \"{}\" x={} w={} max_on_page={} previous_stop={:?}", line, position.x, width, max_width_fitting_on_page, previous_stop_reason);
 
         if max_width_fitting_on_page < 0.0 || previous_stop_reason.is_some() {
-            position.y += text.global_bounds().height + text.line_spacing() * LINE_SPACING;
+            position.y += text_size.height() + line_spacing * LINE_SPACING;
 
             if position.y > line_layout.page_vertical_end {
                 page_number += 1;
@@ -644,9 +652,9 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
 
         if let Some((next_index, next_word)) = iter.peek() {
             let line_with_next = &text_string[start..(next_index + next_word.bytes().count())];
-            text.set_string(line_with_next);
-            let width_with_next = text.local_bounds().width;
-            text.set_string(line);
+
+            let width_with_next = text_calculator.calculate_text_size(font_spec, line_with_next).unwrap().width();
+            //text.set_string(line);
 
             if width < max_width_fitting_on_page && (iter.clone().skip(1).next().is_some() || width_with_next < max_width_fitting_on_page) {
                 previous_word_pair = Some((index, word));
@@ -659,8 +667,7 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
             if let Some((previous_word_index, previous_word)) = previous_word_pair {
                 if !word.trim().is_empty() {
                     line = &text_string[start..(previous_word_index + previous_word.chars().count())];
-                    text.set_string(line);
-                    width = text.local_bounds().width;
+                    width = text_calculator.calculate_text_size(font_spec, line).unwrap().width();
 
                     start_index = Some(index);
                 }
@@ -683,7 +690,7 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
         let mut text_part = text_part_ref.borrow_mut();
         text_part.page_first = page_number;
         text_part.page_last = page_number;
-        text_part.size = text.local_bounds().size();
+        text_part.size = text_calculator.calculate_text_size(font_spec, line).unwrap();
 
         text_part.position = match text_part.text_settings.justify.unwrap_or(TextJustification::Start) {
             TextJustification::Start => position,
@@ -694,10 +701,8 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
             TextJustification::End => Vector2f::new(line_layout.page_horizontal_end - width, position.y)
         };
 
-        text_part.size = text.local_bounds().size();
-
         //paint_text(context, text, text_settings);
-        line_layout.add_line_height_candidate(text.global_bounds().height);
+        line_layout.add_line_height_candidate(text_part.size.height());
         line_layout.position_on_line.x += width;
 
         position.x += width;

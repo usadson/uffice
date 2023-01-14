@@ -157,6 +157,8 @@ pub enum Brush {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppEvent {
+    PainterRequest,
+
     /// A certain tab was loading and is now ready.
     TabBecameReady(TabId),
 }

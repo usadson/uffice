@@ -24,7 +24,7 @@ use uffice_lib::{profiling::Profiler, profile_expr};
 use crate::{
     wp::{
         self,
-        numbering::NumberingManager, TextPart,
+        numbering::NumberingManager,
     },
     word_processing::{
         DocumentResult,
@@ -33,7 +33,7 @@ use crate::{
     application::load_archive_file_to_string,
     relationships::Relationships,
     style::StyleManager,
-    text_settings::Position, gui::{painter::FontSpecification, Rect, Size},
+    text_settings::Position, gui::{painter::{FontSpecification, TextCalculator}, Rect, Size},
 };
 
 use super::{
@@ -59,7 +59,7 @@ pub struct DocumentView {
     page_textures: Vec<Rc<RefCell<RenderTexture>>>,
 }
 
-fn draw_document(archive_path: &str) -> DocumentResult {
+fn draw_document(archive_path: &str, text_calculator: &mut dyn TextCalculator) -> DocumentResult {
     let mut profiler = Profiler::new(String::from("Document Rendering"));
 
     let archive_file = profile_expr!(profiler, "Open Archive", std::fs::File::open(archive_path)
@@ -121,12 +121,12 @@ fn draw_document(archive_path: &str) -> DocumentResult {
             .expect("Archive missing word/document.xml: this file is not a WordprocessingML document!");
     let document = xml::Document::parse(&document_text)
             .expect("Failed to parse document");
-    word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager, document_properties)
+    word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager, document_properties, text_calculator)
 }
 
 impl DocumentView {
-    pub fn new(archive_path: &str) -> Self {
-        let (page_textures, document) = draw_document(archive_path);
+    pub fn new(archive_path: &str, text_calculator: &mut dyn TextCalculator) -> Self {
+        let (page_textures, document) = draw_document(archive_path, text_calculator);
 
         let mut view = Self {
             view_data: ViewData {  },
@@ -188,7 +188,6 @@ impl DocumentView {
     /// and based on the layout tree a paint tree. That way we can just iterate
     /// the paint nodes and draw the document fast.
     fn paint(&mut self, event: &mut super::PaintEvent) {
-        let mut y = event.start_y;
         let max_y = event.window_size.height as f32;
 
         if let Some(document) = &self.document {
@@ -303,7 +302,9 @@ impl super::ViewImpl for DocumentView {
         let mut height = VERTICAL_PAGE_MARGIN * 2.0;
 
         // The gaps between the pages.
-        height += (self.page_textures.len() - 1) as f32 * VERTICAL_PAGE_GAP;
+        if self.page_textures.len() > 0 {
+            height += (self.page_textures.len() - 1) as f32 * VERTICAL_PAGE_GAP;
+        }
 
         for page_tex in &self.page_textures {
             height += page_tex.as_ref().borrow().size().y as f32;
@@ -332,7 +333,7 @@ impl super::ViewImpl for DocumentView {
                 document.borrow_mut().apply_recursively(&|node, depth| {
                     print!("🌲: {}{:?}", "    ".repeat(depth), node.data);
                     print!(" @ ({}, {})", node.position.x, node.position.y,);
-                    print!(" sized ({}x{})", node.size.x, node.size.y);
+                    print!(" sized ({}x{})", node.size.width(), node.size.height());
 
                     println!();
                 }, 0);
@@ -350,4 +351,3 @@ impl super::ViewImpl for DocumentView {
         }
     }
 }
-

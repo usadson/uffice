@@ -6,7 +6,17 @@ use std::{rc::Rc, cell::RefCell};
 use roxmltree as xml;
 use sfml::{graphics::{Color, TextStyle, Font, Text}, system::Vector2f};
 
-use crate::{word_processing::{HALF_POINT, TWELFTEENTH_POINT}, color_parser, WORD_PROCESSING_XML_NAMESPACE, style::StyleManager, wp::layout::LineLayout, fonts::FontManager, gui::painter::FontWeight};
+use crate::{
+    word_processing::{
+        HALF_POINT,
+        TWELFTEENTH_POINT
+    },
+    color_parser,
+    WORD_PROCESSING_XML_NAMESPACE,
+    style::StyleManager,
+    wp::layout::LineLayout,
+    gui::painter::{FontWeight, TextCalculator}
+};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Size {
@@ -101,7 +111,7 @@ pub struct Numbering {
 }
 impl Numbering {
     pub fn create_node(&self, paragraph: Rc<RefCell<crate::wp::Node>>, line_layout: &mut LineLayout,
-                       font_manager: &mut FontManager) -> Rc<RefCell<crate::wp::Node>> {
+                       text_calculator: &mut dyn TextCalculator) -> Rc<RefCell<crate::wp::Node>> {
         assert!(paragraph.try_borrow_mut().is_ok());
         let numbering_definition_instance = &self.definition
                 .as_ref()
@@ -128,7 +138,7 @@ impl Numbering {
         let numbering_parent = crate::wp::create_child(paragraph.clone(), crate::wp::NodeData::NumberingParent);
         numbering_parent.borrow_mut().text_settings = self.combine_text_settings(&paragraph.as_ref().borrow(), &level);
 
-        crate::word_processing::append_text_element(&displayed_text, numbering_parent.clone(), line_layout, font_manager);
+        crate::word_processing::append_text_element(&displayed_text, numbering_parent.clone(), line_layout, text_calculator);
         let numbering_parent = numbering_parent.as_ref().borrow();
         numbering_parent.children.as_ref().unwrap().last().unwrap().clone()
     }

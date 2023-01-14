@@ -1101,7 +1101,7 @@ dependencies = [
 [[package]]
 name = "mltg"
 version = "0.20.3"
-source = "git+https://github.com/usadson/mltg?branch=feature-transforms#ea90e029191e0674c0e90218aee3713b6a54c406"
+source = "git+https://github.com/usadson/mltg?branch=main#67bb725a9ffaf2a8473a6d0351f02d583a38a4d4"
 dependencies = [
  "gecl",
  "raw-window-handle 0.5.0",

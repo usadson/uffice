@@ -6,7 +6,7 @@
 // Windows APIs relating to painting, but doesn't expose them since they're
 // not relevant for other systems.
 
-use std::{rc::Rc, cell::RefCell, collections::{HashMap, hash_map::Entry}, hash::Hash};
+use std::{rc::Rc, cell::RefCell, collections::{HashMap, hash_map::Entry}, hash::Hash, sync::{Arc, Mutex}};
 
 use winit::{
     window::{
@@ -21,6 +21,8 @@ use crate::gui::{
     Rect,
     Color, Position, Size
 };
+
+use super::FontSelectionError;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
@@ -273,6 +275,42 @@ impl Win32PainterCache {
     }
 }
 
+pub struct Win32TextCalculator {
+    context: mltg::Context<mltg::Direct2D>,
+    factory: mltg::Factory,
+
+    cache: Win32PainterCache,
+}
+
+impl Win32TextCalculator {
+    fn new(cache: Win32PainterCache) -> Self {
+        let context = mltg::Context::new(mltg::Direct2D::new().unwrap()).unwrap();
+        let factory = context.create_factory();
+
+        Self { context, factory, cache }
+    }
+
+    fn get_font(&mut self, font_spec: super::FontSpecification) -> Result<Rc<CachedFont>, FontSelectionError> {
+        if let Some(cached_font) = self.cache.find_cached_font(font_spec) {
+            return Ok(cached_font);
+        }
+
+        let loaded_font = load_font(&self.cache.sources, &self.factory, font_spec)?;
+        Ok(self.cache.insert_font(font_spec, loaded_font))
+    }
+}
+
+impl super::TextCalculator for Win32TextCalculator {
+    fn calculate_text_size(&mut self, font_spec: super::FontSpecification, text: &str) -> Result<Size<f32>, FontSelectionError> {
+        let font = self.get_font(font_spec)?;
+        Ok(self.factory.create_text_layout(text, &font.format, mltg::TextAlignment::Leading, None).unwrap().size().into())
+    }
+
+    fn line_spacing(&mut self, font: super::FontSpecification) -> Result<f32, FontSelectionError> {
+        Ok(self.get_font(font)?.format.line_spacing().unwrap().height)
+    }
+}
+
 /// TODO this struct should support Drop entirely, but mltg neither supports
 /// Drop nor interfacing with windows' Direct2D structs, making e.g
 /// `IDXGISwapChain1->Release()` impossible.
@@ -291,6 +329,8 @@ pub struct Win32Painter {
     selected_font: SelectOption<Rc<CachedFont>>,
 
     commands: Vec<PaintCommand>,
+
+    text_calculator: Option<Rc<RefCell<Win32TextCalculator>>>,
 }
 
 impl Win32Painter {
@@ -325,6 +365,7 @@ impl Win32Painter {
             selected_font: SelectOption::NeverSelected,
 
             commands: Vec::new(),
+            text_calculator: None,
         };
 
         Ok(painter)
@@ -465,5 +506,26 @@ impl super::Painter for Win32Painter {
         self.current_cache = cache;
         self.ensure_cache_created(cache);
         self.selected_font = SelectOption::Cleared;
+    }
+
+    fn text_calculator(&mut self) -> Rc<RefCell<dyn super::TextCalculator>> {
+        match self.text_calculator.as_ref() {
+            Some(calculator) => calculator.clone(),
+            None => {
+                let calculator = Rc::new(
+                    RefCell::new(
+                        Win32TextCalculator::new(
+                            Win32PainterCache {
+                                sources: self.shared_cache_sources.clone(),
+                                font_families: HashMap::new(),
+                            }
+                        )
+                    )
+                );
+
+                self.text_calculator = Some(calculator.clone());
+                calculator
+            }
+        }
     }
 }

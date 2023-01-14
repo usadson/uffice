@@ -1,7 +1,7 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use super::{painter::{Painter, win32::Win32Painter, FontSpecification}, Color, Brush, Rect, Position, Size, AppEvent};
+use super::{painter::{Painter, win32::Win32Painter}, AppEvent};
 
 /// Get the formatted window title base, the prefix of the window title
 /// excluding the document title/path.
@@ -20,6 +20,9 @@ pub trait GuiApp {
     fn on_event(&mut self, window: &mut Window, event: AppEvent);
 
     fn paint(&mut self, event: PaintEvent);
+
+    // TODO: This API is ugly.
+    fn receive_painter(&mut self, painter: Arc<RefCell<dyn Painter>>);
 }
 
 struct GuiAppData {
@@ -125,7 +128,10 @@ pub fn run<F>(app_creator: F)
 
                 app_data.painter().display();
             },
-            Event::UserEvent(app_event) => app.on_event(&mut window, app_event),
+            Event::UserEvent(app_event) => match &app_event {
+                AppEvent::PainterRequest => app.receive_painter(app_data._painter.clone()),
+                _ => app.on_event(&mut window, app_event)
+            },
             _ => ()
         }
     });

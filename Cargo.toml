@@ -32,7 +32,7 @@ zip = "*"
 
 [target.'cfg(windows)'.dependencies]
 # Use my own fork before the Pull Requests have been merged on the main project.
-mltg = { version = "*", git = "https://github.com/usadson/mltg", branch = "feature-transforms" }
+mltg = { version = "*", git = "https://github.com/usadson/mltg", branch = "main" }
 registry = "*"
 utfx = "*"
 windows = { version = "*", features = [

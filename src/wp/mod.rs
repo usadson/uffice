@@ -19,7 +19,7 @@ use crate::{
         TextSettings,
         PageSettings, Position, Rect
     },
-    relationships::Relationship
+    relationships::Relationship, gui::Size
 };
 
 use self::painter::Painter;
@@ -92,7 +92,7 @@ pub struct Node {
 
     pub text_settings: TextSettings,
 
-    pub size: Vector2f,
+    pub size: Size<f32>,
 
     pub interaction_states: InteractionStates,
 
@@ -188,7 +188,7 @@ impl Node {
 
         match self.data {
             NodeData::TextPart(..) => {
-                let rect = Rect::new(self.position, self.size);
+                let rect = Rect::new(self.position, Vector2f::new(self.size.width(), self.size.height()));
                 if rect.is_inside_inclusive(position) {
                     callback(self);
                     return true;
@@ -315,7 +315,7 @@ pub struct TextRun {
     pub instruction: Option<crate::wp::instructions::Field>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Hyperlink {
     pub relationship: Option<Rc<RefCell<Relationship>>>,
 }
@@ -373,23 +373,7 @@ impl Hyperlink {
     }
 }
 
-impl Default for Hyperlink {
-    fn default() -> Self {
-        Self {
-            relationship: None
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct StructuredDocumentTag {
 
-}
-
-impl Default for StructuredDocumentTag {
-    fn default() -> Self {
-        Self {
-
-        }
-    }
 }
