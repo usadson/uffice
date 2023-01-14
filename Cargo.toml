@@ -18,6 +18,7 @@ dotenv = "*"
 font-kit = "*"
 notify = "*"
 roxmltree = "*"
+raw-window-handle = "*"
 sfml = "*"
 structopt = "*"
 strum_macros = "*"
@@ -30,8 +31,20 @@ winit = "0.27.0"
 zip = "*"
 
 [target.'cfg(windows)'.dependencies]
+# Use my own fork before the Pull Requests have been merged on the main project.
+mltg = { version = "*", git = "https://github.com/usadson/mltg" }
 registry = "*"
 utfx = "*"
+windows = { version = "*", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct2D",
+    "Win32_Graphics_Direct2D_Common",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+]}
 
 [[bin]]
 name = "uffice"

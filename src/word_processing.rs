@@ -131,7 +131,7 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
 
     let mut context = Context{
         document,
-        font_manager: FontManager::new(font_kit::sources::multi::MultiSource::from_sources(resolve_font_sources())),
+        font_manager: FontManager::new(),
 
         document_relationships,
         style_manager,
@@ -751,30 +751,4 @@ fn process_text_run_element(context: &mut Context,
     }
 
     position
-}
-
-fn resolve_font_sources() -> Vec<Box<(dyn font_kit::source::Source + 'static)>> {
-    let mut sources = vec![];
-
-    #[cfg(target_os = "windows")]
-    {
-        let str = format!("{}\\Microsoft\\FontCache\\4\\CloudFonts", env!("LOCALAPPDATA"));
-
-        match Path::new(&str).canonicalize() {
-            Ok(path) => {
-                sources.push(path);
-            }
-            Err(e) => {
-                println!("[ResolveFontSources] Failed to locate Windows FontCache \"{}\": {:?}", str, e);
-                std::process::exit(0)
-            }
-        }
-    }
-
-    vec![
-        Box::new(font_kit::source::SystemSource::new()),
-        Box::new(fonts::WinFontCacheSource::new(
-            sources
-        ))
-    ]
 }

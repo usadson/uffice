@@ -1,7 +1,7 @@
 // Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::{path::PathBuf, collections::HashMap, rc::Rc};
+use std::{path::{PathBuf, Path}, collections::HashMap, rc::Rc};
 
 use font_kit::family_name::FamilyName;
 use sfml::graphics::Font;
@@ -152,10 +152,38 @@ impl CacheEntry {
     }
 }
 
+pub fn resolve_font_sources() -> Vec<Box<(dyn font_kit::source::Source + 'static)>> {
+    let mut sources = vec![];
+
+    #[cfg(target_os = "windows")]
+    {
+        let str = format!("{}\\Microsoft\\FontCache\\4\\CloudFonts", env!("LOCALAPPDATA"));
+
+        match Path::new(&str).canonicalize() {
+            Ok(path) => {
+                sources.push(path);
+            }
+            Err(e) => {
+                println!("[ResolveFontSources] Failed to locate Windows FontCache \"{}\": {:?}", str, e);
+                std::process::exit(0)
+            }
+        }
+    }
+
+    vec![
+        Box::new(font_kit::source::SystemSource::new()),
+
+        #[cfg(target_os = "windows")]
+        Box::new(WinFontCacheSource::new(
+            sources
+        ))
+    ]
+}
+
 impl FontManager {
-    pub fn new(source: font_kit::sources::multi::MultiSource) -> Self {
+    pub fn new() -> Self {
         Self {
-            source,
+            source: font_kit::sources::multi::MultiSource::from_sources(resolve_font_sources()),
             cache: HashMap::new(),
         }
     }

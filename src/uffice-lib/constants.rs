@@ -9,6 +9,15 @@ pub mod vendor {
 
 }
 
+pub mod application {
+
+    /// The name of the application.
+    pub const NAME: &str = "Uffice";
+
+    pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+}
+
 pub mod component {
 
     macro_rules! prog_id {
@@ -34,5 +43,3 @@ pub mod component {
     }
 
 }
-
-

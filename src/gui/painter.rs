@@ -1,10 +1,89 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-pub struct Painter {
+use super::{Brush, Rect, Position, Size};
 
+#[cfg(windows)]
+pub mod win32;
+
+#[derive(Debug)]
+pub enum FontSelectionError {
+    /// Failed to access the resource associated with the font.
+
+    CannotAccessResource,
+    /// Failed to find the font with the specified options.
+    NotFound,
 }
 
-struct ColoredRectangle {
+/// Specifies what font to use.
+#[derive(Debug, Clone, Copy)]
+pub struct FontSpecification<'a> {
+    family_name: &'a str,
+    size: f32,
+}
+
+impl<'a> FontSpecification<'a> {
+    pub fn new(family_name: &'a str, size: f32) -> FontSpecification<'a> {
+        Self {
+            family_name,
+            size
+        }
+    }
+}
+
+/// The PainterCache specifies which cache to use when painting. This way, we
+/// can clear a certain cache without clearing too much.
+///
+/// This is especially useful when a document uses a lot of fonts, but the
+/// other open documents and the UI don't use those fonts. When that document
+/// is closed, we can clear that cache without having cache misses in the next
+/// repaint.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum PainterCache {
+    /// The user-interface cache. This is the default cache.
+    UI,
+
+    /// The cache for a certain document. ID allocation and management is not
+    /// in the scope of the GUI painter API.
+    Document(usize),
+}
+
+/// Paint on a window using specific functions. The underlying implementation
+/// might schedule paint tasks, so the commands might not get processed
+/// immediately.
+///
+/// ## Commands
+/// Commands are the requested paint functions, such as [paint_rect](paint_rect).
+pub trait Painter {
+
+    /// Clears a certain cache. This frees up memory for this given cache.
+    fn clear_cache(&mut self, cache: PainterCache);
+
+    /// Process the paint commands.
+    ///
+    /// This is only applicable for Painters that schedule the commands, other
+    /// painters can ignore this function.
+    fn display(&mut self);
+
+    /// Called when the window, client rect, etc resizes.
+    fn handle_resize(&mut self, window: &mut winit::window::Window);
+
+    /// Paint a rect using the specified brush.
+    fn paint_rect(&mut self, brush: Brush, rect: Rect<f32>);
+
+    /// Paint the text using the specified brush. Returns the size of the text
+    /// in pixels.
+    fn paint_text(&mut self, brush: Brush, position: Position<f32>, text: &str) -> Size<f32>;
+
+    /// Prepare for new paint commands.
+    fn reset(&mut self);
+
+    /// Changes the current font to the specified font below, which uses
+    /// caching to improve performance.
+    fn select_font(&mut self, font: FontSpecification) -> Result<(), FontSelectionError>;
+
+    /// Switches to a certain cache. When it is not created or cleared, it will
+    /// be allocated for you.
+    fn switch_cache(&mut self, cache: PainterCache);
 
 }

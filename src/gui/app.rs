@@ -1,6 +1,118 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+use super::{painter::{Painter, win32::Win32Painter, FontSpecification}, Color, Brush, Rect, Position, Size};
+
+/// Get the formatted window title base, the prefix of the window title
+/// excluding the document title/path.
+///
+/// An example result: "TheWoosh Uffice"
+const fn formatted_base_title() -> &'static str {
+    const_format::formatcp!("{} {}", uffice_lib::constants::vendor::NAME, uffice_lib::constants::application::NAME)
+}
+
+struct App {
+    _painter: Box<dyn Painter>,
+}
+
+fn create_painter(window: &mut Window) -> Box<dyn Painter> {
+    Box::new(Win32Painter::new(window).expect("Failed to create painter"))
+}
+
+impl App {
+    pub fn new(window: &mut Window) -> Self {
+        Self {
+            _painter: create_painter(window)
+        }
+    }
+
+    /// Returns the painter and initialises it when needed.
+    pub fn painter(&mut self) -> &mut dyn Painter {
+        self._painter.as_mut()
+    }
+
+    /// This function will reset the painter, which can be useful in cases of
+    /// switching from software to hardware accelerated rendering, switching to
+    /// another graphics library, etc.
+    #[allow(dead_code)]
+    pub fn reset_painter(&mut self, _window: &mut Window) {
+        todo!("Resetting/changing the painter is unsupported yet, since the Direct2D painter doesn't support Drop yet.");
+
+        // self._painter = create_painter(window);
+    }
+}
+
+pub fn run() {
+    let event_loop = EventLoop::new();
+
+    let mut window = WindowBuilder::new()
+        .with_title(formatted_base_title())
+        .build(&event_loop)
+        .unwrap();
+
+    let mut app = App::new(&mut window);
+
+    event_loop.run(move |event, _, control_flow| {
+        // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
+        // dispatched any events. This is ideal for games and similar applications.
+        control_flow.set_poll();
+
+        // ControlFlow::Wait pauses the event loop if no events are available to process.
+        // This is ideal for non-game applications that only update in response to user
+        // input, and uses significantly less power/CPU time than ControlFlow::Poll.
+        control_flow.set_wait();
+
+        match event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                println!("The close button was pressed; stopping");
+                control_flow.set_exit();
+            },
+
+            Event::WindowEvent { event: WindowEvent::Resized(..), .. } => {
+                println!("window resized {:?}", event);
+                app.painter().handle_resize(&mut window);
+            },
+
+            Event::WindowEvent { event: WindowEvent::ScaleFactorChanged{ .. }, .. } => {
+                println!("window scale factor changed {:?}", event);
+                app.painter().handle_resize(&mut window);
+            },
+
+            Event::MainEventsCleared => {
+                // Application update code.
+
+                // Queue a RedrawRequested event.
+                //
+                // You only need to call this if you've determined that you need to redraw, in
+                // applications which do not always need to. Applications that redraw continuously
+                // can just render here instead.
+
+                //window.request_redraw();
+            },
+            Event::RedrawRequested(_) => {
+                // Redraw the application.
+                //
+                // It's preferable for applications that do not render continuously to render in
+                // this event rather than in MainEventsCleared, since rendering in here allows
+                // the program to gracefully handle redraws requested by the OS.
+
+                app.painter().reset();
+
+                app.painter().paint_rect(Brush::SolidColor(Color::RED), Rect::from_position_and_size(Position::new(0.0, 0.0), Size::new(10.0, 10.0)));
+
+                app.painter().select_font(FontSpecification::new("Calibri", 14.0)).expect("Font system doesn't work");
+                app.painter().paint_text(Brush::SolidColor(Color::BLUE), Position::new(0.0, 0.0), "Ciao gente! ^_^");
+
+                app.painter().display();
+            },
+            _ => ()
+        }
+    });
+}
+
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
@@ -41,10 +153,12 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-pub struct App {
+#[allow(dead_code)]
+pub struct AppOld {
 }
 
-impl App {
+impl AppOld {
+    #[allow(dead_code)]
     pub fn run() -> ! {
         // The first step of any Vulkan program is to create an instance.
         //

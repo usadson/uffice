@@ -34,9 +34,10 @@ fn main() {
 
     println!(">> Uffice <<");
 
-    let mut app = Application::new(
-            std::env::var("UFFICE_TEST_FILE").expect("No file given")
-    );
-    app.run();
+    // let mut app = Application::new(
+    //         std::env::var("UFFICE_TEST_FILE").expect("No file given")
+    // );
+    // app.run();
     //gui::app::App::run();
+    gui::app::run();
 }
