@@ -78,6 +78,12 @@ impl<T> Size<T> where T: Copy {
     }
 }
 
+impl<T> From<winit::dpi::LogicalSize<T>> for Size<T> {
+    fn from(value: winit::dpi::LogicalSize<T>) -> Self {
+        Self { width: value.width, height: value.height }
+    }
+}
+
 /// Defines a size. Prefer this over using Vector2f for everything since it
 /// communicates the definition better.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

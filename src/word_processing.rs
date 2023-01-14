@@ -22,7 +22,7 @@ use crate::{
     relationships::Relationships,
     wp::{
         Document, Node, painter::{Painter, PageRenderTargets}, numbering
-    }, gui::painter::{TextCalculator, FontSpecification},
+    }, gui::painter::{TextCalculator, FontSpecification}, style::StyleManager,
 };
 
 const CORE_FACTOR: f32 = 1.0f32;
