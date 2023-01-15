@@ -12,6 +12,9 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 use windows::Win32::System::Com::CoInitialize;
+use winit::event::ElementState;
+use winit::event::VirtualKeyCode;
+use winit::window::Window;
 use winit::{
     event::{
         DeviceEvent,
@@ -28,7 +31,10 @@ use crate::gui::{
     Color,
     Size,
 
-    animate::Zoomer,
+    animate::{
+        Animated,
+        Zoomer,
+    },
     painter::{
         Painter,
         PainterCache,
@@ -229,14 +235,29 @@ impl Tab {
     }
 
     /// Returns whether or not to repaint.
-    pub fn on_scroll(&mut self, delta: MouseScrollDelta) -> bool {
+    pub fn on_scroll(&mut self, delta: MouseScrollDelta, keyboard: &uffice_lib::Keyboard) -> bool {
         if let MouseScrollDelta::LineDelta(_left, top) = delta {
-            self.scroller.scroll(top);
+            if keyboard.is_control_key_dow() {
+                if top > 0.2 {
+                    return self.zoomer.increase_zoom_level();
+                }
 
+                if top < -0.2 {
+                    return self.zoomer.decrease_zoom_level();
+                }
+
+                return false;
+            }
+
+            self.scroller.scroll(top);
             return true;
         }
 
         return false;
+    }
+
+    pub fn has_running_animations(&mut self) -> bool {
+        self.zoomer.has_running_animation() || self.scroller.has_running_animation()
     }
 }
 
@@ -246,6 +267,8 @@ pub struct App {
     next_tab_id: usize,
     current_visible_tab: Option<TabId>,
     tabs: HashMap<TabId, Tab>,
+
+    keyboard: uffice_lib::Keyboard,
 }
 
 impl App {
@@ -257,6 +280,8 @@ impl App {
             next_tab_id: 1000,
             current_visible_tab: None,
             tabs: HashMap::new(),
+
+            keyboard: uffice_lib::Keyboard::new(),
         };
 
         app.add_tab(PathBuf::from(first_file_to_open));
@@ -294,6 +319,36 @@ impl App {
             AppEvent::PainterRequest => ()
         }
     }
+
+    /// Called when the specified key is pressed (for the first time, not held).
+    pub fn on_key_pressed(&mut self, key: VirtualKeyCode, window: &mut Window) {
+        println!("Key: {:?}", key);
+        match key {
+            VirtualKeyCode::Minus => {
+                if self.keyboard.is_control_key_dow() {
+                    if let Some(current_tab_id) = self.current_visible_tab {
+                        if self.tabs.get_mut(&current_tab_id).unwrap().zoomer.decrease_zoom_level() {
+                            println!("Zooming out");
+                            window.request_redraw();
+                        }
+                    }
+                }
+            }
+
+            VirtualKeyCode::Equals => {
+                if self.keyboard.is_control_key_dow() {
+                    if let Some(current_tab_id) = self.current_visible_tab {
+                        if self.tabs.get_mut(&current_tab_id).unwrap().zoomer.increase_zoom_level() {
+                            println!("Zooming in");
+                            window.request_redraw();
+                        }
+                    }
+                }
+            }
+
+            _ => ()
+        }
+    }
 }
 
 impl crate::gui::app::GuiApp for App {
@@ -305,11 +360,22 @@ impl crate::gui::app::GuiApp for App {
                 event: DeviceEvent::MouseWheel { delta }, ..
             } => {
                 if let Some(current_tab_id) = self.current_visible_tab {
-                    let should_scroll = self.tabs.get_mut(&current_tab_id).unwrap().on_scroll(delta);
+                    let should_scroll = self.tabs.get_mut(&current_tab_id).unwrap().on_scroll(delta, &self.keyboard);
                     if should_scroll {
                         window.request_redraw();
                     }
                 }
+            }
+
+            Event::DeviceEvent { event: DeviceEvent::Key(keyboard), .. } => {
+
+                if let Some(key) = keyboard.virtual_keycode {
+                    if keyboard.state == ElementState::Pressed && !self.keyboard.is_down(key) {
+                        self.on_key_pressed(key, window);
+                    }
+                }
+
+                self.keyboard.handle_input_event(&keyboard);
             }
 
             Event::UserEvent(app_event) => self.handle_user_event(window, app_event),
@@ -318,7 +384,7 @@ impl crate::gui::app::GuiApp for App {
         }
     }
 
-    fn paint(&mut self, event: crate::gui::app::PaintEvent) {
+    fn paint(&mut self, event: &mut crate::gui::app::PaintEvent) {
         let window_size = event.window.inner_size().to_logical::<f32>(event.window.scale_factor()).into();
 
         assert!(event.painter.try_borrow_mut().is_ok(), "Failed to painter borrow as mutable; cannot paint App");
@@ -335,6 +401,10 @@ impl crate::gui::app::GuiApp for App {
             painter.switch_cache(PainterCache::UI);
 
             current_tab.scroller.paint(event.window, &mut *painter);
+
+            if current_tab.has_running_animations() {
+                event.should_redraw_again = true;
+            }
         }
     }
 

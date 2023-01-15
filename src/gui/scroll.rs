@@ -115,3 +115,10 @@ impl Scroller {
         }
     }
 }
+
+impl super::animate::Animated for Scroller {
+    fn has_running_animation(&self) -> bool {
+        // TODO state changes like is_pressed and is_hovered
+        !self.animator.is_finished()
+    }
+}

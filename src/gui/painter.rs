@@ -34,6 +34,25 @@ pub enum FontWeight {
     Black,
 }
 
+impl From<FontWeight> for f32 {
+    /// Convert the FontWeight into the industry-standard numeric format.
+    fn from(value: FontWeight) -> Self {
+        match value {
+            FontWeight::Custom(value) => value,
+            FontWeight::Thin => 100.0,
+            FontWeight::ExtraLight => 200.0,
+            FontWeight::Light => 300.0,
+            FontWeight::SemiLight => 350.0,
+            FontWeight::Regular => 400.0,
+            FontWeight::Medium => 500.0,
+            FontWeight::SemiBold => 600.0,
+            FontWeight::Bold => 700.0,
+            FontWeight::ExtraBold => 800.0,
+            FontWeight::Black => 900.0,
+        }
+    }
+}
+
 /// Specifies what font to use.
 #[derive(Debug, Clone, Copy)]
 pub struct FontSpecification<'a> {

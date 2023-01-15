@@ -258,7 +258,9 @@ impl DocumentView {
                         let text_size = node.text_settings.non_complex_text_size.unwrap() as f32 * HALF_POINT * event.zoom;
                         let font_family_name = node.text_settings.font.clone().unwrap_or(String::from("Calibri"));
                         event.painter.select_font(FontSpecification::new(&font_family_name, text_size, node.text_settings.font_weight())).unwrap();
-                        event.painter.paint_text(node.text_settings.brush(), position, &part.text);
+                        let size = event.painter.paint_text(node.text_settings.brush(), position, &part.text);
+
+                        //println!("Text \"{}\" for size {} and dims {:?}", part.text, text_size, size);
                     }
                     _ => ()
                 }

@@ -132,6 +132,24 @@ impl From<super::FontWeight> for mltg::FontWeight {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Hash, Eq, Ord)]
+struct FontVariantCacheKey {
+    /// Some weird conversion in order to have the Hash trait.
+    size: u64,
+
+    /// We only care about the 350.5 decimal, not the others.
+    weight: u32,
+}
+
+impl<'a> From<super::FontSpecification<'a>> for FontVariantCacheKey {
+    fn from(value: super::FontSpecification<'a>) -> Self {
+        Self {
+            size: (value.size * 10.0) as u64,
+            weight: (Into::<f32>::into(value.weight) * 10.0) as u32,
+        }
+    }
+}
+
 struct SharedCacheSources {
     font_source: font_kit::sources::multi::MultiSource,
 }
@@ -178,7 +196,7 @@ struct CachedFont {
 }
 
 struct CachedFontFamily {
-    types: HashMap<mltg::TextStyle, Rc<CachedFont>>,
+    types: HashMap<FontVariantCacheKey, Rc<CachedFont>>,
 }
 
 struct Win32PainterCache {
@@ -189,6 +207,7 @@ struct Win32PainterCache {
 }
 
 fn load_font(sources: &Rc<RefCell<SharedCacheSources>>, factory: &mltg::Factory, font: super::FontSpecification) -> Result<(mltg::TextStyle, mltg::TextFormat), super::FontSelectionError> {
+    println!("[Painter(Win32)] Loading new font \"{}\" with size {}", font.family_name, Into::<FontVariantCacheKey>::into(font).size);
     let properties = font_kit::properties::Properties {
         weight: font.weight.into(),
         ..Default::default()
@@ -235,7 +254,7 @@ fn load_font(sources: &Rc<RefCell<SharedCacheSources>>, factory: &mltg::Factory,
 
 impl Win32PainterCache {
     pub fn insert_font(&mut self, font_spec: super::FontSpecification, font: (mltg::TextStyle, mltg::TextFormat)) -> Rc<CachedFont> {
-        let (style, format) = font;
+        let (_style, format) = font;
         match self.font_families.entry(String::from(font_spec.family_name)) {
             Entry::Occupied(o) => {
                 let family = o.get().clone();
@@ -245,7 +264,7 @@ impl Win32PainterCache {
                     format
                 });
 
-                family.types.insert(style, cached_font.clone());
+                family.types.insert(font_spec.into(), cached_font.clone());
                 cached_font
             }
             Entry::Vacant(v) => {
@@ -256,7 +275,8 @@ impl Win32PainterCache {
                 ));
 
                 let cached_font = Rc::new(CachedFont { parent: family.clone(), format });
-                family.borrow_mut().types.insert(style, cached_font.clone());
+                let previous = family.borrow_mut().types.insert(font_spec.into(), cached_font.clone());
+                assert!(previous.is_none(), "Loaded a new font for nothing!");
 
                 v.insert(family);
 
@@ -268,7 +288,7 @@ impl Win32PainterCache {
     pub fn find_cached_font(&self, font: super::FontSpecification) -> Option<Rc<CachedFont>> {
         match self.font_families.get(font.family_name) {
             Some(family) => {
-                Some(family.as_ref().borrow().types.values().next().unwrap().clone())
+                family.as_ref().borrow().types.get(&font.into()).cloned()
             }
             None => None
         }

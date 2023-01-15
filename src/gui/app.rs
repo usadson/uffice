@@ -14,12 +14,16 @@ pub const fn formatted_base_title() -> &'static str {
 pub struct PaintEvent<'a> {
     pub window: &'a mut Window,
     pub painter: Arc<RefCell<dyn Painter>>,
+
+    /// This PaintEvent wasn't adequate, this flag lets the GUI event loop know
+    /// to redraw.
+    pub should_redraw_again: bool,
 }
 
 pub trait GuiApp {
     fn on_event(&mut self, window: &mut Window, event: winit::event::Event<AppEvent>);
 
-    fn paint(&mut self, event: PaintEvent);
+    fn paint(&mut self, event: &mut PaintEvent);
 
     // TODO: This API is ugly.
     fn receive_painter(&mut self, painter: Arc<RefCell<dyn Painter>>);
@@ -72,6 +76,11 @@ pub fn run<F>(app_creator: F)
 
     let mut app = app_creator(&mut window, proxy.clone());
 
+    // We cannot call [winit::window::Window::request_redraw](request_redraw)
+    // from just any location. This flags makes the Event::MainEventsCleared
+    // know to do the request for us.
+    let mut redraw_requested = false;
+
     event_loop.run(move |event, _, control_flow| {
         // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
         // dispatched any events. This is ideal for games and similar applications.
@@ -92,12 +101,10 @@ pub fn run<F>(app_creator: F)
             },
 
             Event::WindowEvent { event: WindowEvent::Resized(..), .. } => {
-                println!("window resized {:?}", event);
                 app_data.painter().handle_resize(&mut window);
             },
 
             Event::WindowEvent { event: WindowEvent::ScaleFactorChanged{ .. }, .. } => {
-                println!("window scale factor changed {:?}", event);
                 app_data.painter().handle_resize(&mut window);
             },
 
@@ -111,6 +118,10 @@ pub fn run<F>(app_creator: F)
                 // can just render here instead.
 
                 //window.request_redraw();
+                if redraw_requested {
+                    redraw_requested = false;
+                    window.request_redraw();
+                }
             },
             Event::RedrawRequested(_) => {
                 // Redraw the application.
@@ -121,10 +132,16 @@ pub fn run<F>(app_creator: F)
 
                 app_data.painter().reset();
 
-                app.paint(PaintEvent {
+                let mut event = PaintEvent {
                     window: &mut window,
                     painter: app_data._painter.clone(),
-                });
+                    should_redraw_again: false
+                };
+                app.paint(&mut event);
+
+                if event.should_redraw_again {
+                    redraw_requested = true;
+                }
 
                 app_data.painter().display();
             },

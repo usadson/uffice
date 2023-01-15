@@ -3,6 +3,8 @@
 
 use std::collections::HashMap;
 
+use winit::event::VirtualKeyCode;
+
 pub mod constants;
 pub mod namespaces;
 pub mod math;
@@ -10,14 +12,14 @@ pub mod profiling;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum KeyState {
-    RELEASED,
-    PRESSED,
-    HELD,
+    Released,
+    Pressed,
+    Held,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Keyboard {
-    states: HashMap<sfml::window::Key, KeyState>,
+    states: HashMap<VirtualKeyCode, KeyState>,
 }
 
 impl Keyboard {
@@ -25,36 +27,30 @@ impl Keyboard {
         Default::default()
     }
 
-    pub fn get_state(&self, key: sfml::window::Key) -> KeyState {
+    pub fn get_state(&self, key: VirtualKeyCode) -> KeyState {
         match self.states.get(&key) {
             Some(state) => state.clone(),
-            None => KeyState::RELEASED
+            None => KeyState::Released
         }
     }
 
-    pub fn handle_sfml_event(&mut self, event: &sfml::window::Event) {
-        use sfml::window::Event;
+    pub fn handle_input_event(&mut self, event: &winit::event::KeyboardInput) {
+        use winit::event::ElementState;
 
-        match event {
-            Event::KeyPressed { code, alt: _, ctrl: _, shift: _, system: _ } => {
-                self.states.insert(code.clone(), KeyState::PRESSED);
-            }
-
-            Event::KeyReleased { code, alt: _, ctrl: _, shift: _, system: _ } => {
-                self.states.remove(code);
-            }
-
-            _ => ()
+        if let Some(virtual_key) = event.virtual_keycode.clone() {
+            match event.state {
+                ElementState::Pressed => self.states.insert(virtual_key, KeyState::Pressed),
+                ElementState::Released => self.states.remove(&virtual_key),
+            };
         }
     }
 
     /// Checks if either of the control keys are down.
     pub fn is_control_key_dow(&self) -> bool {
-        use sfml::window::Key;
-        self.is_down(Key::LControl) || self.is_down(Key::RControl)
+        self.is_down(VirtualKeyCode::LControl) || self.is_down(VirtualKeyCode::RControl)
     }
 
-    pub fn is_down(&self, key: sfml::window::Key) -> bool {
-        self.get_state(key) != KeyState::RELEASED
+    pub fn is_down(&self, key: VirtualKeyCode) -> bool {
+        self.get_state(key) != KeyState::Released
     }
 }

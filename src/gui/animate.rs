@@ -9,6 +9,13 @@ use super::scroll::Scroller;
 pub struct Animator {
     begin: Instant,
     delay_ms: f32,
+    finished: bool,
+}
+
+/// An object that may contain animations.
+pub trait Animated {
+    /// Does the object have an animation right now?
+    fn has_running_animation(&self) -> bool;
 }
 
 impl Animator {
@@ -16,6 +23,7 @@ impl Animator {
         Self {
             begin: Instant::now(),
             delay_ms: 220.0,
+            finished: true,
         }
     }
 
@@ -23,11 +31,17 @@ impl Animator {
         Self {
             begin: Instant::now(),
             delay_ms,
+            finished: true,
         }
     }
 
     pub fn reset(&mut self) {
         self.begin = Instant::now();
+        self.finished = false;
+    }
+
+    pub fn is_finished(&self) -> bool {
+        self.finished
     }
 
     pub fn update(&mut self) -> f32 {
@@ -35,12 +49,14 @@ impl Animator {
         let diff = now.duration_since(self.begin);
 
         if diff.as_millis() > self.delay_ms as u128 {
+            self.finished = true;
             return 1.0;
         }
 
         let value = diff.as_millis() as f32 / self.delay_ms;
 
         return if value > 1.0 {
+            self.finished = true;
             1.0
         } else {
             value
@@ -104,27 +120,41 @@ impl Zoomer {
 
     /// Steps to the next zoom level, if any.
     /// For example, when the current zoom level is 1.5, it will move to 1.7.
-    pub fn increase_zoom_level(&mut self) {
+    pub fn increase_zoom_level(&mut self) -> bool {
         let next_zoom_index = self.zoom_index + 1;
-        if next_zoom_index < ZOOM_LEVELS.len() {
-            self.zoom_index = next_zoom_index;
-            self.zoom_level.change(ZOOM_LEVELS[next_zoom_index]);
+        if next_zoom_index >= ZOOM_LEVELS.len() {
+            return false;
         }
+
+        self.zoom_index = next_zoom_index;
+        self.zoom_level.change(ZOOM_LEVELS[next_zoom_index]);
+
+        return true;
     }
 
     /// Steps to the previous zoom level, if any.
     /// For example, when the current zoom level is 1.7, it will move to 1.5.
-    pub fn decrease_zoom_level(&mut self) {
-        if self.zoom_index != 0 {
-            let next_zoom_index = self.zoom_index - 1;
-            self.zoom_index = next_zoom_index;
-            self.zoom_level.change(ZOOM_LEVELS[next_zoom_index]);
+    pub fn decrease_zoom_level(&mut self) -> bool {
+        if self.zoom_index == 0 {
+            return false;
         }
+
+        let next_zoom_index = self.zoom_index - 1;
+        self.zoom_index = next_zoom_index;
+        self.zoom_level.change(ZOOM_LEVELS[next_zoom_index]);
+
+        return true;
     }
 
     /// Gets the zoom factor, determining how zoomed in or out the view should
     /// be.
     pub fn zoom_factor(&mut self) -> f32 {
         self.zoom_level.get()
+    }
+}
+
+impl Animated for Zoomer {
+    fn has_running_animation(&self) -> bool {
+        !self.zoom_level.animator.is_finished()
     }
 }
