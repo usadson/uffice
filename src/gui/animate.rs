@@ -3,10 +3,80 @@
 
 use std::time::Instant;
 use uffice_lib::math;
-use super::scroll::Scroller;
+use crate::user_settings::{SettingChangeSubscriber, SettingChangeNotification, SettingName};
+
+use super::{scroll::Scroller, Position};
+
+#[derive(Clone, Debug)]
+pub enum EasingFunction {
+    /// Not an easing function, but will act as if the animation completed
+    /// immediately.
+    DisabledAnimations,
+    Linear,
+    CubicBezier(Position<f32>, Position<f32>, Position<f32>, Position<f32>),
+    EaseOutQuadratic,
+}
+
+impl EasingFunction {
+
+    /// Apply the easing function to the given input.
+    pub fn apply(&self, x: f32) -> f32 {
+        assert!(x >= 0.0);
+        assert!(x <= 1.0);
+
+        match self {
+            EasingFunction::DisabledAnimations => 1.0,
+            EasingFunction::Linear => x,
+            EasingFunction::CubicBezier(p0, p1, p2, p3) => {
+                let t1 = 1.0 - x;
+                let t2 = t1 * t1;
+                let t3 = t2 * t1;
+
+                let pt =
+                    p0.clone() * t3 +
+                    p1.clone() * 3.0 * t2 * x +
+                    p2.clone() * 3.0 * t1 * x * x +
+                    p3.clone() * 3.0 * x * x * x;
+
+                pt.x
+            }
+            EasingFunction::EaseOutQuadratic => 1.0 - (1.0 - x) * (1.0 - x),
+        }
+    }
+
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_linear_easing() {
+        let function = EasingFunction::Linear;
+
+        assert_eq!(function.apply(0.0), 0.0);
+        assert_eq!(function.apply(0.1), 0.1);
+        assert_eq!(function.apply(0.2), 0.2);
+        assert_eq!(function.apply(0.5), 0.5);
+        assert_eq!(function.apply(0.75), 0.75);
+        assert_eq!(function.apply(1.0), 1.0);
+    }
+
+    #[test]
+    fn test_ease_out_quadratic() {
+        let function = EasingFunction::EaseOutQuadratic;
+
+        assert_eq!(function.apply(0.0), 0.0);
+        assert_eq!(function.apply(0.3), 0.51);
+        assert_eq!(function.apply(0.5), 0.75);
+        assert_eq!(function.apply(0.75), 0.9375);
+        assert_eq!(function.apply(1.0), 1.0);
+    }
+}
 
 #[derive(Debug)]
 pub struct Animator {
+    pub easing_function: EasingFunction,
     begin: Instant,
     delay_ms: f32,
     finished: bool,
@@ -19,16 +89,9 @@ pub trait Animated {
 }
 
 impl Animator {
-    pub fn new() -> Self {
+    pub fn new_with_delay(delay_ms: f32, easing_function: EasingFunction) -> Self {
         Self {
-            begin: Instant::now(),
-            delay_ms: 220.0,
-            finished: true,
-        }
-    }
-
-    pub fn new_with_delay(delay_ms: f32) -> Self {
-        Self {
+            easing_function,
             begin: Instant::now(),
             delay_ms,
             finished: true,
@@ -59,7 +122,7 @@ impl Animator {
             self.finished = true;
             1.0
         } else {
-            value
+            self.easing_function.apply(value)
         }
     }
 }
@@ -72,9 +135,9 @@ pub struct InterpolatedValue {
 }
 
 impl InterpolatedValue {
-    pub fn new(start_value: f32, duration_ms: f32) -> Self {
+    pub fn new(start_value: f32, duration_ms: f32, easing_function: EasingFunction) -> Self {
         Self {
-            animator: Animator::new_with_delay(duration_ms),
+            animator: Animator::new_with_delay(duration_ms, easing_function),
             start_value,
             end_value: start_value
         }
@@ -100,6 +163,8 @@ const ZOOM_ANIMATION_SPEED: f32 = 150.0;
 
 const DEFAULT_ZOOM_LEVEL_INDEX: usize = 4;
 
+const ZOOM_EASING_FUNCTION: EasingFunction = EasingFunction::EaseOutQuadratic;
+
 #[derive(Debug)]
 /// Controls the zoom behavior by processesing Control +/- and
 /// Control + Mouse Wheel.
@@ -114,7 +179,7 @@ impl Zoomer {
     pub fn new() -> Self {
         Self {
             zoom_index: DEFAULT_ZOOM_LEVEL_INDEX,
-            zoom_level: InterpolatedValue::new(ZOOM_LEVELS[DEFAULT_ZOOM_LEVEL_INDEX], ZOOM_ANIMATION_SPEED),
+            zoom_level: InterpolatedValue::new(ZOOM_LEVELS[DEFAULT_ZOOM_LEVEL_INDEX], ZOOM_ANIMATION_SPEED, ZOOM_EASING_FUNCTION),
         }
     }
 
@@ -156,5 +221,19 @@ impl Zoomer {
 impl Animated for Zoomer {
     fn has_running_animation(&self) -> bool {
         !self.zoom_level.animator.is_finished()
+    }
+}
+
+impl SettingChangeSubscriber for Zoomer {
+    fn setting_changed(&mut self, notification: &SettingChangeNotification) {
+        if notification.setting_name != SettingName::EnableAnimations {
+            return;
+        }
+
+        self.zoom_level.animator.easing_function = if notification.settings.setting_enable_animations() {
+            ZOOM_EASING_FUNCTION
+        } else {
+            EasingFunction::DisabledAnimations
+        }
     }
 }

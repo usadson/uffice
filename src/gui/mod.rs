@@ -151,6 +151,22 @@ impl<T> Position<T> where T: Copy {
     }
 }
 
+impl<T: std::ops::Mul<T, Output = T> + Copy> std::ops::Mul<T> for Position<T> {
+    type Output = Position<T>;
+
+    fn mul(self, rhs: T) -> Self::Output {
+        Position::new(self.x * rhs, self.y * rhs)
+    }
+}
+
+impl<T: std::ops::Add<T, Output = T> + Copy> std::ops::Add<Position<T>> for Position<T> {
+    type Output = Position<T>;
+
+    fn add(self, rhs: Position<T>) -> Self::Output {
+        Position::new(self.x + rhs.x, self.y + rhs.y)
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 /// An RGBA color.
 pub struct Color {

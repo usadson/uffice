@@ -12,6 +12,7 @@ mod style;
 mod text_settings;
 mod word_processing;
 mod unicode;
+mod user_settings;
 mod wp;
 
 pub const WORD_PROCESSING_XML_NAMESPACE: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";

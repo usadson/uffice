@@ -4,7 +4,9 @@
 use uffice_lib::math;
 use winit::window::Window;
 
-use super::{animate::Animator, painter::Painter, Brush, Color, Position, Size, Rect};
+use crate::user_settings::{SettingChangeSubscriber, SettingChangeNotification, SettingName};
+
+use super::{animate::{Animator, EasingFunction}, painter::Painter, Brush, Color, Position, Size, Rect};
 
 pub const SCROLL_BAR_WIDTH: f32 = 20.0;
 
@@ -37,6 +39,8 @@ pub struct Scroller {
 }
 
 impl Scroller {
+    const EASING_FUNC: EasingFunction = EasingFunction::EaseOutQuadratic;
+
     pub fn new() -> Self {
         Self {
             value: 0.0,
@@ -46,7 +50,7 @@ impl Scroller {
             thumb_rect: Rect::empty(),
             is_hovered: false,
             is_pressed: false,
-            animator: Animator::new_with_delay(150.0),
+            animator: Animator::new_with_delay(150.0, Self::EASING_FUNC),
             value_increase: 0.0,
         }
     }
@@ -116,5 +120,19 @@ impl super::animate::Animated for Scroller {
     fn has_running_animation(&self) -> bool {
         // TODO state changes like is_pressed and is_hovered
         !self.animator.is_finished()
+    }
+}
+
+impl SettingChangeSubscriber for Scroller {
+    fn setting_changed(&mut self, notification: &SettingChangeNotification) {
+        if notification.setting_name != SettingName::EnableAnimations {
+            return;
+        }
+
+        self.animator.easing_function = if notification.settings.setting_enable_animations() {
+            Self::EASING_FUNC
+        } else {
+            EasingFunction::DisabledAnimations
+        }
     }
 }

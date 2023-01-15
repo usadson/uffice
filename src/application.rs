@@ -45,6 +45,9 @@ use crate::gui::{
         document_view::VERTICAL_PAGE_MARGIN
     },
 };
+use crate::user_settings::SettingChangeNotification;
+use crate::user_settings::SettingChangeSubscriber;
+use crate::user_settings::UserSettings;
 
 /// The background color of the application. This is the color under the pages.
 const APPLICATION_BACKGROUND_COLOR: Color = Color::from_rgb(29, 28, 33);
@@ -261,6 +264,13 @@ impl Tab {
     }
 }
 
+impl SettingChangeSubscriber for Tab {
+    fn setting_changed(&mut self, notification: &SettingChangeNotification) {
+        self.scroller.setting_changed(notification);
+        self.zoomer.setting_changed(notification);
+    }
+}
+
 pub struct App {
     event_loop_proxy: EventLoopProxy<AppEvent>,
 
@@ -269,6 +279,7 @@ pub struct App {
     tabs: HashMap<TabId, Tab>,
 
     keyboard: uffice_lib::Keyboard,
+    user_settings: UserSettings,
 }
 
 impl App {
@@ -282,6 +293,7 @@ impl App {
             tabs: HashMap::new(),
 
             keyboard: uffice_lib::Keyboard::new(),
+            user_settings: UserSettings::load(),
         };
 
         app.add_tab(PathBuf::from(first_file_to_open));
@@ -346,7 +358,21 @@ impl App {
                 }
             }
 
+            VirtualKeyCode::Key0 => {
+                // self.broadcast_setting_changed(&SettingChangeNotification {
+                //     origin: crate::user_settings::SettingChangeOrigin::System,
+                //     setting_name: crate::user_settings::SettingName::EnableAnimations,
+                //     settings: &self.user_settings
+                // });
+            }
+
             _ => ()
+        }
+    }
+
+    fn broadcast_setting_changed(&mut self, notification: &SettingChangeNotification) {
+        for tab in self.tabs.values_mut() {
+            tab.setting_changed(notification);
         }
     }
 }
@@ -356,6 +382,11 @@ impl crate::gui::app::GuiApp for App {
     fn on_event(&mut self, window: &mut winit::window::Window, event: winit::event::Event<AppEvent>) {
         use winit::event::Event;
         match event {
+
+            // TODO: Receive system parameter change updates. This is necessary
+            //       to provide a smooth user experience. Examples of such an
+            //       event include the WM_SETTINGCHANGE of the Windows API.
+
             Event::DeviceEvent {
                 event: DeviceEvent::MouseWheel { delta }, ..
             } => {
