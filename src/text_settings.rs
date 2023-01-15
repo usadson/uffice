@@ -4,17 +4,17 @@
 use std::{rc::Rc, cell::RefCell};
 
 use roxmltree as xml;
-use sfml::{graphics::{Color, TextStyle, Font, Text}, system::Vector2f};
+use sfml::{graphics::{TextStyle}, system::Vector2f};
 
 use crate::{
     word_processing::{
-        HALF_POINT,
         TWELFTEENTH_POINT
     },
     color_parser,
     WORD_PROCESSING_XML_NAMESPACE,
     style::StyleManager,
     wp::layout::LineLayout,
+    gui::Color,
     gui::painter::{FontWeight, TextCalculator}
 };
 
@@ -211,19 +211,6 @@ impl TextSettings {
         inherit_or_original(&other.indentation_left, &mut self.indentation_left);
     }
 
-    pub fn create_text<'a>(&self, font: &'a Font) -> Text<'a> {
-        let character_size = match self.non_complex_text_size {
-            Some(size) => size as f32 * HALF_POINT,
-            None => panic!("No default text size defined!")
-        } as u32;
-
-        let mut text = Text::new("L", font, character_size);
-        text.set_style(self.create_style());
-        text.set_fill_color(self.color.unwrap_or(Color::BLACK));
-
-        text
-    }
-
     pub fn create_style(&self) -> TextStyle {
         let mut style = TextStyle::REGULAR;
 
@@ -354,7 +341,7 @@ impl TextSettings {
 
     pub fn brush(&self) -> crate::gui::Brush {
         let color = self.color.unwrap_or(Color::BLACK);
-        crate::gui::Brush::SolidColor(crate::gui::Color::from_rgba(color.r, color.g, color.b, color.a))
+        crate::gui::Brush::SolidColor(color)
     }
 
 }

@@ -51,8 +51,46 @@ impl<T> Rect<T> where T: Copy + std::ops::Add<Output = T> + std::ops::Sub<Output
         Position::new(self.left, self.top)
     }
 
-    pub fn size(&self) -> Position<T> {
-        Position::new(self.right - self.left, self.bottom - self.top)
+    pub fn size(&self) -> Size<T> {
+        Size::new(self.width(), self.height())
+    }
+
+    /// Get the width of the Rect.
+    pub fn width(&self) -> T {
+        self.right - self.left
+    }
+
+    /// Get the height of the Rect.
+    pub fn height(&self) -> T {
+        self.bottom - self.top
+    }
+}
+
+impl Rect<f32> {
+    /// Creates a Rect with no size.
+    pub fn empty() -> Rect<f32> {
+        Self::from_position_and_size(Position::new(0.0, 0.0), Size::empty())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_test() {
+        assert_eq!(Rect::empty(), Rect::from_position_and_size(Position::new(0.0, 0.0), Size::new(0.0, 0.0)));
+
+        assert_eq!(Rect::empty().bottom, 0.0);
+        assert_eq!(Rect::empty().top, 0.0);
+        assert_eq!(Rect::empty().right, 0.0);
+        assert_eq!(Rect::empty().left, 0.0);
+
+        assert_eq!(Rect::empty().width(), 0.0);
+        assert_eq!(Rect::empty().height(), 0.0);
+
+        assert_eq!(Rect::empty().position(), Position::new(0.0, 0.0));
+        assert_eq!(Rect::empty().size(), Size::empty());
     }
 }
 
@@ -75,6 +113,13 @@ impl<T> Size<T> where T: Copy {
 
     pub fn height(&self) -> T {
         self.height
+    }
+}
+
+impl Size<f32> {
+    /// Creates a size with no width or height.
+    pub fn empty() -> Size<f32> {
+        Self { width: 0.0, height: 0.0 }
     }
 }
 
@@ -117,11 +162,19 @@ pub struct Color {
 
 impl Color {
 
+    /// Black, or in hex notation: #000000
     pub const BLACK: Color = Color::from_rgb(0, 0, 0);
+
+    /// White, or in hex notation: #FFFFFF
     pub const WHITE: Color = Color::from_rgb(255, 255, 255);
 
+    /// Red, or in hex notation: #FF0000
     pub const RED: Color = Color::from_rgb(255, 0, 0);
+
+    /// Green, or in hex notation: #00FF00
     pub const GREEN: Color = Color::from_rgb(0, 255, 0);
+
+    /// Blue, or in hex notation: #0000FF
     pub const BLUE: Color = Color::from_rgb(0, 0, 255);
 
     /// Creates a color from RGB color components, with full alpha opaqueness.

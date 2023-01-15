@@ -3,7 +3,7 @@
 
 use std::ops::{Deref, DerefMut};
 
-use sfml::{system::{Vector2f, Vector2}, window::CursorType, graphics::RenderWindow};
+use sfml::{system::Vector2f, window::CursorType};
 
 use super::{Size, painter::Painter};
 
@@ -57,20 +57,9 @@ pub trait ViewImpl {
 
 #[derive(Debug)]
 pub enum Event<'a> {
-    Draw(DrawEvent<'a>),
     Paint(PaintEvent<'a>),
 
     MouseMoved(Vector2f, &'a mut Option<CursorType>),
-}
-
-#[derive(Debug)]
-pub struct DrawEvent<'a> {
-    /// The opaqueness of the view, from 0.0 to 1.0 inclusive.
-    pub opaqueness: f32,
-    pub start_y: f32,
-    pub window: &'a mut RenderWindow,
-    pub window_size: Vector2<u32>,
-    pub zoom: f32,
 }
 
 pub struct PaintEvent<'a> {

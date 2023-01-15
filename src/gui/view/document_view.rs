@@ -9,12 +9,6 @@ use std::{
 use roxmltree as xml;
 
 use sfml::{
-    graphics::{
-        RenderTexture,
-        RenderTarget,
-        Sprite,
-        Transformable, Color,
-    },
     system::Vector2f,
     window::CursorType,
 };
@@ -56,9 +50,6 @@ pub struct DocumentView {
     document: Option<Rc<RefCell<crate::wp::Node>>>,
 
     page_rects: Vec<Rect<f32>>,
-
-    content_rect: sfml::graphics::Rect<f32>,
-    page_textures: Vec<Rc<RefCell<RenderTexture>>>,
 }
 
 fn draw_document(archive_path: &str, text_calculator: &mut dyn TextCalculator) -> DocumentResult {
@@ -128,62 +119,10 @@ fn draw_document(archive_path: &str, text_calculator: &mut dyn TextCalculator) -
 
 impl DocumentView {
     pub fn new(archive_path: &str, text_calculator: &mut dyn TextCalculator) -> Self {
-        let (page_textures, document) = draw_document(archive_path, text_calculator);
-
-        let mut view = Self {
+        Self {
             view_data: ViewData {  },
             page_rects: Vec::new(),
-            content_rect: Default::default(),
-            document: Some(document),
-            page_textures: page_textures.render_targets
-        };
-
-        view.content_rect = view.calculate_content_rect();
-
-        view
-    }
-
-    fn calculate_content_rect(&self) -> sfml::graphics::Rect<f32> {
-        let mut width = 0.0;
-
-        for page in &self.page_textures {
-            let width_candidate = page.as_ref().borrow().size().x as f32;
-            if width < width_candidate {
-                width = width_candidate;
-            }
-        }
-
-        sfml::graphics::Rect::<f32>::new(0.0, 0.0, width, self.calculate_content_height())
-    }
-
-    fn draw(&mut self, event: &mut super::DrawEvent) {
-        let mut y = event.start_y;
-        for render_texture in &self.page_textures {
-            // I don't know rust well enough to be able to keep a Sprite
-            // around _and_ replace the texture.
-            //
-            // But since this code is not performance-critical I don't care
-            // atm.
-
-            let texture = render_texture.borrow();
-            let mut sprite = Sprite::with_texture(texture.texture());
-
-            let full_size = event.window_size.x as f32;
-            let page_size = sprite.texture_rect().width as f32;
-
-            let scale = full_size * event.zoom / page_size;
-            let centered_x = (full_size - page_size * scale) / 2.0;
-            sprite.set_scale((scale, scale));
-
-            sprite.set_position((
-                centered_x,
-                y
-            ));
-
-            y += sprite.global_bounds().size().y + VERTICAL_PAGE_GAP * event.zoom;
-
-            sprite.set_color(Color::rgba(255, 255, 255, (255.0 * event.opaqueness) as u8));
-            event.window.draw(&sprite);
+            document: Some(draw_document(archive_path, text_calculator)),
         }
     }
 
@@ -258,8 +197,9 @@ impl DocumentView {
                         let text_size = node.text_settings.non_complex_text_size.unwrap() as f32 * HALF_POINT * event.zoom;
                         let font_family_name = node.text_settings.font.clone().unwrap_or(String::from("Calibri"));
                         event.painter.select_font(FontSpecification::new(&font_family_name, text_size, node.text_settings.font_weight())).unwrap();
-                        let size = event.painter.paint_text(node.text_settings.brush(), position, &part.text);
 
+                        //let size =
+                        event.painter.paint_text(node.text_settings.brush(), position, &part.text);
                         //println!("Text \"{}\" for size {} and dims {:?}", part.text, text_size, size);
                     }
                     _ => ()
@@ -307,9 +247,7 @@ impl super::ViewImpl for DocumentView {
     }
 
     fn check_interactable_for_mouse(&self, mouse_position: Vector2f, callback: &mut dyn FnMut(&mut crate::wp::Node, crate::text_settings::Position)) -> bool {
-        if !self.content_rect.contains(mouse_position) {
-            return false;
-        }
+        // TODO: check if the mouse is inside the bounds of a page.
 
         let doc = self.document.as_ref().unwrap();
         let mut document = doc.borrow_mut();
@@ -337,7 +275,6 @@ impl super::ViewImpl for DocumentView {
 
     fn handle_event(&mut self, event: &mut super::Event) {
         match event {
-            super::Event::Draw(draw_event) => self.draw(draw_event),
             super::Event::Paint(event) => self.paint(event),
             super::Event::MouseMoved(mouse_position, new_cursor) =>
                 self.on_mouse_moved(*mouse_position, *new_cursor),

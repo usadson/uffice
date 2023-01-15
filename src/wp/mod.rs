@@ -5,7 +5,6 @@ pub mod document_properties;
 pub mod instructions;
 pub mod layout;
 pub mod numbering;
-pub mod painter;
 
 use std::{
     rc::{Rc, Weak},
@@ -21,8 +20,6 @@ use crate::{
     },
     relationships::Relationship, gui::Size
 };
-
-use self::painter::Painter;
 
 #[derive(Debug, strum_macros::IntoStaticStr)]
 pub enum NodeData {
@@ -162,14 +159,8 @@ impl Node {
             }
         }
 
-        match &self.data {
-            NodeData::Hyperlink(hyperlink) => hyperlink.on_event(event),
-            NodeData::TextPart(part) => part.on_event(self, event),
-            NodeData::Drawing(drawing) => match event {
-                Event::Paint(painter) => drawing.draw(self.page_first, self.position, painter),
-                _ => ()
-            }
-            _ => ()
+        if let NodeData::Hyperlink(hyperlink) = &self.data {
+            hyperlink.on_event(event);
         }
     }
 
@@ -279,10 +270,9 @@ impl MouseEvent {
     }
 }
 
-pub enum Event<'a, 'b> {
+pub enum Event {
     Click(MouseEvent),
     Hover(MouseEvent),
-    Paint(&'b mut Painter<'a>),
 }
 
 #[derive(Debug)]
@@ -297,17 +287,6 @@ pub struct Document {
 #[derive(Debug)]
 pub struct TextPart {
     pub text: String,
-}
-
-impl TextPart {
-    pub fn on_event(&self, node: &Node, event: &mut Event) {
-        match event {
-            Event::Paint(painter) => {
-                painter.paint_text(&self.text, node.page_first, node.position, &node.text_settings)
-            }
-            _ => ()
-        }
-    }
 }
 
 #[derive(Debug, Default)]

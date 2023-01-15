@@ -6,13 +6,9 @@
 // Windows APIs relating to painting, but doesn't expose them since they're
 // not relevant for other systems.
 
-use std::{rc::Rc, cell::RefCell, collections::{HashMap, hash_map::Entry}, hash::Hash, sync::{Arc, Mutex}};
+use std::{rc::Rc, cell::RefCell, collections::{HashMap, hash_map::Entry}, hash::Hash};
 
-use winit::{
-    window::{
-        Window,
-    },
-};
+use winit::window::Window;
 
 use raw_window_handle::HasRawWindowHandle;
 
@@ -296,7 +292,6 @@ impl Win32PainterCache {
 }
 
 pub struct Win32TextCalculator {
-    context: mltg::Context<mltg::Direct2D>,
     factory: mltg::Factory,
 
     cache: Win32PainterCache,
@@ -307,7 +302,7 @@ impl Win32TextCalculator {
         let context = mltg::Context::new(mltg::Direct2D::new().unwrap()).unwrap();
         let factory = context.create_factory();
 
-        Self { context, factory, cache }
+        Self { factory, cache }
     }
 
     fn get_font(&mut self, font_spec: super::FontSpecification) -> Result<Rc<CachedFont>, FontSelectionError> {

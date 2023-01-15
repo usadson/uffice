@@ -3,7 +3,6 @@
 
 use crate::{relationships::{Relationship, Relationships}, gui::Size};
 use roxmltree as xml;
-use sfml::{system::Vector2f, graphics::{Transformable, RenderTarget}};
 use std::{cell::RefCell, rc::Rc};
 
 #[derive(Debug)]
@@ -45,6 +44,7 @@ impl DrawingObject {
         }
     }
 
+    /*
     pub fn draw<'a>(&self, page: usize, position: Vector2f, painter: &mut crate::wp::painter::Painter) {
         match &self.graphic {
             GraphicObject::Empty => (),
@@ -72,6 +72,7 @@ impl DrawingObject {
             }
         }
     }
+    */
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]

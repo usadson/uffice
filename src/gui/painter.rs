@@ -1,7 +1,7 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::{sync::{Arc, Mutex}, cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use super::{Brush, Rect, Position, Size};
 

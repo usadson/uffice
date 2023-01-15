@@ -5,10 +5,7 @@ use roxmltree as xml;
 use uffice_lib::namespaces::XMLNS_RELATIONSHIPS;
 use unicode_segmentation::UnicodeSegmentation;
 
-use std::{
-    cell::{RefCell, RefMut},
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 use sfml::system::Vector2f;
 
@@ -21,8 +18,10 @@ use crate::{
     error::Error,
     relationships::Relationships,
     wp::{
-        Document, Node, painter::{Painter, PageRenderTargets}, numbering
-    }, gui::painter::{TextCalculator, FontSpecification}, style::StyleManager,
+        Document, Node, numbering
+    },
+    gui::painter::{TextCalculator, FontSpecification},
+    style::StyleManager,
 };
 
 const CORE_FACTOR: f32 = 1.0f32;
@@ -90,7 +89,7 @@ fn load_page_settings(document: &xml::Document) -> Result<PageSettings, Error> {
     panic!("No direct child \"sectPr\" of root element found :(");
 }
 
-pub type DocumentResult = (wp::painter::PageRenderTargets, Rc<RefCell<Node>>);
+pub type DocumentResult = Rc<RefCell<Node>>;
 
 pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
                         document_relationships: &Relationships,
@@ -150,27 +149,7 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
         }
     }
 
-    // let mut font_manager = context.text_calculator;
-
-    let mut render_targets = PageRenderTargets{ render_targets: Vec::new() };
-    // {
-    //     let mut painter = Painter {
-    //         pages: &mut render_targets,
-    //         page_size: render_size,
-    //         font_manager: &mut font_manager,
-    //         last_texture_index: None,
-    //     };
-
-    //     draw_document(doc.borrow_mut(), &mut painter);
-    // }
-
-    (render_targets, doc.clone())
-}
-
-fn draw_document(mut document: RefMut<Node>, painter: &mut Painter) {
-    document.on_event(&mut wp::Event::Paint(painter));
-
-    painter.finish();
+    doc
 }
 
 fn process_drawing_element(context: &mut Context, parent: Rc<RefCell<Node>>,
@@ -249,15 +228,13 @@ fn process_pragraph_element(context: &mut Context,
                             parent: Rc<RefCell<Node>>,
                             node: &xml::Node,
                             original_position: Vector2f) -> Vector2f {
-    let mut position = original_position;
-
     let paragraph = wp::append_child(parent, wp::Node::new(wp::NodeData::Paragraph(wp::Paragraph)));
 
     //position.x = context.page_settings.margins.left as f32 * TWELFTEENTH_POINT;
     let mut line_layout = wp::layout::LineLayout::new(&context.page_settings, original_position.y);
 
     paragraph.borrow_mut().position = line_layout.position_on_line;
-    position = line_layout.position_on_line;
+    let mut position = line_layout.position_on_line;
     //paragraph.borrow_mut().position = position;
 
     if let Some(first_child) = node.first_child() {
@@ -622,7 +599,7 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
         }
 
         let mut line = &text_string[start..(index + word.bytes().count())];
-        let mut text_size = text_calculator.calculate_text_size(font_spec, line).unwrap();
+        let text_size = text_calculator.calculate_text_size(font_spec, line).unwrap();
         let mut width = text_size.width();
 
         let max_width_fitting_on_page = line_layout.page_horizontal_end - position.x;

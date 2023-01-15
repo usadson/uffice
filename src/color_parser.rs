@@ -1,14 +1,18 @@
 // Copyright (C) 2022 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use sfml::graphics::Color;
+use crate::gui::Color;
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ColorParseError {
     LengthNotSixBytes,
     ElementNotHexCharacter,
 }
 
+/// Parses a hex character:
+/// 1. '0' to '9' inclusive => 0x0 to 0x9
+/// 2. 'A' to 'F' inclusive => 0xA to 0xF
+/// 2. 'a' to 'f' inclusive => 0xa to 0xf
 fn parse_color_element_hex_character(c: u8) -> Result<u8, ColorParseError> {
     const DIGIT_0: u8 = 0x30;
     const DIGIT_9: u8 = 0x39;
@@ -43,7 +47,7 @@ pub fn parse_color(value: &str) -> Result<Color, ColorParseError> {
         return Err(ColorParseError::LengthNotSixBytes);
     }
 
-    Ok(Color::rgb(
+    Ok(Color::from_rgb(
         parse_color_element(value.as_bytes()[0], value.as_bytes()[1])?,
         parse_color_element(value.as_bytes()[2], value.as_bytes()[3])?,
         parse_color_element(value.as_bytes()[4], value.as_bytes()[5])?
@@ -52,25 +56,55 @@ pub fn parse_color(value: &str) -> Result<Color, ColorParseError> {
 
 pub fn parse_highlight_color(value: &str) -> Color {
     match value {
-        "black" => Color::rgb(0, 0, 0),
-        "blue" => Color::rgb(0, 0, 0xFF),
-        "cyan" => Color::rgb(0, 0xFF, 0xFF),
-        "darkBlue" => Color::rgb(0, 0, 0x8B),
-        "darkCyan" => Color::rgb(0, 0x8B, 0x8B),
-        "darkGray" => Color::rgb(0xA9, 0xA9, 0xA9),
-        "darkGreen" => Color::rgb(0, 0x64, 0),
-        "darkMagenta" => Color::rgb(0x80, 0, 0x80),
-        "darkRed" => Color::rgb(0x8B, 0, 0),
-        "darkYellow" => Color::rgb(0x80, 0x80, 0),
-        "green" => Color::rgb(0, 0xFF, 0),
-        "lightGray" => Color::rgb(0xD3, 0xD3, 0xD3),
-        "magenta" => Color::rgb(0xFF, 0, 0xFF),
-        "none" => Color::rgba(0, 0, 0, 0),
-        "red" => Color::rgb(0xFF, 0, 0),
-        "white" => Color::rgb(0xFF, 0xFF, 0xFF),
-        "yellow" => Color::rgb(0xFF, 0xFF, 0),
+        "black" => Color::from_rgb(0, 0, 0),
+        "blue" => Color::from_rgb(0, 0, 0xFF),
+        "cyan" => Color::from_rgb(0, 0xFF, 0xFF),
+        "darkBlue" => Color::from_rgb(0, 0, 0x8B),
+        "darkCyan" => Color::from_rgb(0, 0x8B, 0x8B),
+        "darkGray" => Color::from_rgb(0xA9, 0xA9, 0xA9),
+        "darkGreen" => Color::from_rgb(0, 0x64, 0),
+        "darkMagenta" => Color::from_rgb(0x80, 0, 0x80),
+        "darkRed" => Color::from_rgb(0x8B, 0, 0),
+        "darkYellow" => Color::from_rgb(0x80, 0x80, 0),
+        "green" => Color::from_rgb(0, 0xFF, 0),
+        "lightGray" => Color::from_rgb(0xD3, 0xD3, 0xD3),
+        "magenta" => Color::from_rgb(0xFF, 0, 0xFF),
+        "none" => Color::from_rgba(0, 0, 0, 0),
+        "red" => Color::from_rgb(0xFF, 0, 0),
+        "white" => Color::from_rgb(0xFF, 0xFF, 0xFF),
+        "yellow" => Color::from_rgb(0xFF, 0xFF, 0),
         _ => {
             panic!("Invalid ST_HighlightColor: \"{}\"", value);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_color_element_hex_character() {
+        for i in 0..=255 {
+            // U+0030 '0' to U+0039 '9'
+            if (0x30..0x3A).contains(&i) {
+                assert_eq!(parse_color_element_hex_character(i), Ok(i - 0x30));
+                continue;
+            }
+
+            // U+0041 'A' to U+0046 'F'
+            if (0x41..0x47).contains(&i) {
+                assert_eq!(parse_color_element_hex_character(i), Ok(i - 0x41 + 0xA));
+                continue;
+            }
+
+            // U+0061 'a' to U+0066 'f'
+            if (0x61..0x67).contains(&i) {
+                assert_eq!(parse_color_element_hex_character(i), Ok(i - 0x61 + 0xA));
+                continue;
+            }
+
+            assert_eq!(parse_color_element_hex_character(i), Err(ColorParseError::ElementNotHexCharacter));
         }
     }
 }

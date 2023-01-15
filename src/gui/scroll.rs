@@ -1,11 +1,10 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use sfml::{graphics::{RenderWindow, RectangleShape, Shape, RenderTarget, Transformable, Rect}, system::Vector2f};
 use uffice_lib::math;
 use winit::window::Window;
 
-use super::{animate::Animator, painter::Painter, Brush, Color, Position, Size};
+use super::{animate::Animator, painter::Painter, Brush, Color, Position, Size, Rect};
 
 pub const SCROLL_BAR_WIDTH: f32 = 20.0;
 
@@ -43,8 +42,8 @@ impl Scroller {
             value: 0.0,
             content_height: 0.0,
             window_height: 0.0,
-            bar_rect: Rect::new(0.0, 0.0, 0.0, 0.0),
-            thumb_rect: Rect::new(0.0, 0.0, 0.0, 0.0),
+            bar_rect: Rect::empty(),
+            thumb_rect: Rect::empty(),
             is_hovered: false,
             is_pressed: false,
             animator: Animator::new_with_delay(150.0),
@@ -54,9 +53,6 @@ impl Scroller {
 
     pub fn scroll(&mut self, value: f32) {
         self.increase_thumb_position(-value);
-    }
-
-    pub fn draw(&mut self, _shape: &mut RectangleShape, _parent: &mut RenderWindow) {
     }
 
     pub fn paint(&mut self, window: &mut Window, painter: &mut dyn Painter) {
@@ -89,7 +85,7 @@ impl Scroller {
     }
 
     pub fn apply_mouse_offset(&mut self, value: f32) {
-        self.increase_thumb_position(value / (self.window_height as f32 - self.thumb_rect.height));
+        self.increase_thumb_position(value / (self.window_height as f32 - self.thumb_rect.height()));
     }
 
     pub fn increase_thumb_position(&mut self, value: f32) {
