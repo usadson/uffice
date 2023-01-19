@@ -124,15 +124,19 @@ impl super::animate::Animated for Scroller {
 }
 
 impl SettingChangeSubscriber for Scroller {
+    fn settings_loaded(&mut self, settings: &crate::user_settings::UserSettings) {
+        self.animator.easing_function = if settings.setting_enable_animations() {
+            Self::EASING_FUNC
+        } else {
+            EasingFunction::DisabledAnimations
+        }
+    }
+
     fn setting_changed(&mut self, notification: &SettingChangeNotification) {
         if notification.setting_name != SettingName::EnableAnimations {
             return;
         }
 
-        self.animator.easing_function = if notification.settings.setting_enable_animations() {
-            Self::EASING_FUNC
-        } else {
-            EasingFunction::DisabledAnimations
-        }
+        self.settings_loaded(notification.settings);
     }
 }

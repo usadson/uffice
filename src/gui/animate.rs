@@ -225,15 +225,19 @@ impl Animated for Zoomer {
 }
 
 impl SettingChangeSubscriber for Zoomer {
+    fn settings_loaded(&mut self, settings: &crate::user_settings::UserSettings) {
+        self.zoom_level.animator.easing_function = if settings.setting_enable_animations() {
+            ZOOM_EASING_FUNCTION
+        } else {
+            EasingFunction::DisabledAnimations
+        }
+    }
+
     fn setting_changed(&mut self, notification: &SettingChangeNotification) {
         if notification.setting_name != SettingName::EnableAnimations {
             return;
         }
 
-        self.zoom_level.animator.easing_function = if notification.settings.setting_enable_animations() {
-            ZOOM_EASING_FUNCTION
-        } else {
-            EasingFunction::DisabledAnimations
-        }
+        self.settings_loaded(notification.settings);
     }
 }

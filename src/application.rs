@@ -46,7 +46,9 @@ use crate::gui::{
     },
 };
 use crate::user_settings::SettingChangeNotification;
+use crate::user_settings::SettingChangeOrigin;
 use crate::user_settings::SettingChangeSubscriber;
+use crate::user_settings::SettingName;
 use crate::user_settings::UserSettings;
 
 /// The background color of the application. This is the color under the pages.
@@ -269,6 +271,11 @@ impl SettingChangeSubscriber for Tab {
         self.scroller.setting_changed(notification);
         self.zoomer.setting_changed(notification);
     }
+
+    fn settings_loaded(&mut self, settings: &UserSettings) {
+        self.scroller.settings_loaded(settings);
+        self.zoomer.settings_loaded(settings);
+    }
 }
 
 pub struct App {
@@ -305,7 +312,9 @@ impl App {
         let tab_id = TabId(self.next_tab_id);
         self.next_tab_id += 1;
 
-        self.tabs.insert(tab_id, Tab::new(tab_id, path, self.event_loop_proxy.clone()));
+        let mut tab = Tab::new(tab_id, path, self.event_loop_proxy.clone());
+        tab.settings_loaded(&self.user_settings);
+        self.tabs.insert(tab_id, tab);
 
         if self.current_visible_tab.is_some() {
             return;
@@ -359,20 +368,19 @@ impl App {
             }
 
             VirtualKeyCode::Key0 => {
-                // self.broadcast_setting_changed(&SettingChangeNotification {
-                //     origin: crate::user_settings::SettingChangeOrigin::System,
-                //     setting_name: crate::user_settings::SettingName::EnableAnimations,
-                //     settings: &self.user_settings
-                // });
+                self.broadcast_setting_changed(SettingChangeOrigin::System, SettingName::EnableAnimations);
             }
 
             _ => ()
         }
     }
 
-    fn broadcast_setting_changed(&mut self, notification: &SettingChangeNotification) {
+    fn broadcast_setting_changed(&mut self, origin: SettingChangeOrigin, setting_name: SettingName) {
+        let notification = SettingChangeNotification {
+            origin, setting_name, settings: &self.user_settings
+        };
         for tab in self.tabs.values_mut() {
-            tab.setting_changed(notification);
+            tab.setting_changed(&notification);
         }
     }
 }
