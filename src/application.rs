@@ -349,7 +349,6 @@ impl App {
                 if self.keyboard.is_control_key_dow() {
                     if let Some(current_tab_id) = self.current_visible_tab {
                         if self.tabs.get_mut(&current_tab_id).unwrap().zoomer.decrease_zoom_level() {
-                            println!("Zooming out");
                             window.request_redraw();
                         }
                     }
@@ -360,7 +359,6 @@ impl App {
                 if self.keyboard.is_control_key_dow() {
                     if let Some(current_tab_id) = self.current_visible_tab {
                         if self.tabs.get_mut(&current_tab_id).unwrap().zoomer.increase_zoom_level() {
-                            println!("Zooming in");
                             window.request_redraw();
                         }
                     }

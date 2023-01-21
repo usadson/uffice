@@ -150,7 +150,7 @@ impl InterpolatedValue {
     }
 
     pub fn get(&mut self) -> f32 {
-        Scroller::bound_position(math::lerp_precise_f32(self.start_value, self.end_value, self.animator.update()))
+        math::lerp_precise_f32(self.start_value, self.end_value, self.animator.update())
     }
 }
 
