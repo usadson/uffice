@@ -22,7 +22,7 @@ use crate::{
     },
     word_processing::{
         DocumentResult,
-        self, HALF_POINT,
+        self, HALF_POINT, TWELFTEENTH_POINT,
     },
     application::load_archive_file_to_string,
     relationships::Relationships,
@@ -150,7 +150,7 @@ impl DocumentView {
             let start_x = (event.window_size.width as f32 - page_width) / 2.0;
 
             let start_y_pages = (first_page..(last_page + 1)).map(|index| {
-                let page_size_and_margin = (VERTICAL_PAGE_GAP + page_settings.size.height as f32) * event.zoom;
+                let page_size_and_margin = (VERTICAL_PAGE_GAP + page_settings.size.height as f32 * TWELFTEENTH_POINT) * event.zoom;
                 let start_y = event.start_y + VERTICAL_PAGE_MARGIN * event.zoom + index as f32 * page_size_and_margin;
 
                 if start_y < max_y {
