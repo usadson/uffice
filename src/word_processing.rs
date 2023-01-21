@@ -603,6 +603,8 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
         let mut width = text_size.width();
 
         let max_width_fitting_on_page = line_layout.page_horizontal_end - position.x;
+
+        #[cfg(feature = "debug-text-layout")]
         println!("path \"{}\" x={} w={} max_on_page={} previous_stop={:?}", line, position.x, width, max_width_fitting_on_page, previous_stop_reason);
 
         if max_width_fitting_on_page < 0.0 || previous_stop_reason.is_some() {
@@ -624,7 +626,7 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
 
         let stop_reason;
 
-        //#[cfg(feature = "debug-text-layout")]
+        #[cfg(feature = "debug-text-layout")]
         println!("width({}) < max_width_fitting_on_page({}) \"{}\"", width, max_width_fitting_on_page, line);
 
         if let Some((next_index, next_word)) = iter.peek() {
@@ -650,6 +652,7 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
                 }
             }
 
+            #[cfg(feature = "debug-text-layout")]
             println!("   stop_reason={:?} start_index={:?}", stop_reason, start_index);
         } else {
             stop_reason = LineStopReason::EndReached;
@@ -657,7 +660,7 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
 
         previous_word_pair = None;
 
-        //#[cfg(feature = "debug-text-layout")]
+        #[cfg(feature = "debug-text-layout")]
         {
             println!("│  │  │  │  ├─ Line: \"{}\", stop_reason={:?}", line, stop_reason);
             println!("│  │  │  │  ├─ Calculation: x={} w={} m={}", position.x, width, max_width_fitting_on_page);

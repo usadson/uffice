@@ -229,11 +229,6 @@ impl TextSettings {
         assert_eq!(element.tag_name().name(), "rPr");
 
         for run_property in element.children() {
-            // println!("│  │  │  ├─ {}", run_property.tag_name().name());
-            // for attr in run_property.attributes() {
-            //     println!("│  │  │  │  ├─ Attribute \"{}\" => \"{}\"", attr.name(), attr.value());
-            // }
-
             match run_property.tag_name().name() {
                 "b" => {
                     self.bold = match self.bold {
@@ -243,7 +238,6 @@ impl TextSettings {
                 }
                 "color" => {
                     for attr in run_property.attributes() {
-                        println!("│  │  │  │  ├─ Color Attribute: {} => {}", attr.name(), attr.value());
                         if attr.name() == "val" && attr.value() != "auto" {
                             self.color = Some(color_parser::parse_color(attr.value()).unwrap());
                         }
