@@ -247,3 +247,16 @@ pub enum AppEvent {
 }
 
 unsafe impl Send for AppEvent {}
+
+/// Defines the state a component is in. This ensures the correct animations and
+/// subsequent state. This state doesn't track state transitions, however.
+pub enum InteractionState {
+    /// The component is hovered or pressed.
+    Default,
+
+    /// The user's cursor is hovering over the component.
+    Hovered,
+
+    /// The user is clicking on the component.
+    Pressed,
+}

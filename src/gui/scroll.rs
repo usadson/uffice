@@ -6,7 +6,16 @@ use winit::window::Window;
 
 use crate::user_settings::{SettingChangeSubscriber, SettingChangeNotification, SettingName};
 
-use super::{animate::{Animator, EasingFunction}, painter::Painter, Brush, Color, Position, Size, Rect};
+use super::{
+    animate::{Animator, EasingFunction},
+    painter::Painter,
+    Brush,
+    Color,
+    Position,
+    Size,
+    Rect,
+    InteractionState
+};
 
 pub const SCROLL_BAR_WIDTH: f32 = 20.0;
 
@@ -23,6 +32,8 @@ const SCROLL_BAR_THUMB_HOVER_COLOR: Color = Color::from_rgb(0x65, 0x32, 0xBC);
 /// The color of the thumb of the scrollbar when it's being clicked on.
 const SCROLL_BAR_THUMB_CLICK_COLOR: Color = Color::from_rgb(0x60, 0x2B, 0xBC);
 
+/// The scroller is responsible for processing the user input (mouse scrolling,
+/// thumb dragging), provides a way to calculate a thumb position and size.
 pub struct Scroller {
     value: f32,
     pub content_height: f32,
@@ -31,8 +42,7 @@ pub struct Scroller {
     pub bar_rect: Rect<f32>,
     pub thumb_rect: Rect<f32>,
 
-    pub is_hovered: bool,
-    pub is_pressed: bool,
+    pub interaction_state: InteractionState,
 
     animator: Animator,
     value_increase: f32,
@@ -41,6 +51,7 @@ pub struct Scroller {
 impl Scroller {
     const EASING_FUNC: EasingFunction = EasingFunction::EaseOutQuadratic;
 
+    /// Instantiates a new scroller.
     pub fn new() -> Self {
         Self {
             value: 0.0,
@@ -48,8 +59,7 @@ impl Scroller {
             window_height: 0.0,
             bar_rect: Rect::empty(),
             thumb_rect: Rect::empty(),
-            is_hovered: false,
-            is_pressed: false,
+            interaction_state: InteractionState::Default,
             animator: Animator::new_with_delay(150.0, Self::EASING_FUNC),
             value_increase: 0.0,
         }
@@ -59,6 +69,8 @@ impl Scroller {
         self.increase_thumb_position(-value);
     }
 
+    /// Draws the scroll bar track with the thumb.
+    /// TODO: add thumb arrows.
     pub fn paint(&mut self, window: &mut Window, painter: &mut dyn Painter) {
         let window_size = window.inner_size().to_logical::<f32>(window.scale_factor());
         self.window_height = window_size.height;
@@ -73,12 +85,10 @@ impl Scroller {
         );
         painter.paint_rect(Brush::SolidColor(SCROLL_BAR_BACKGROUND_COLOR), bar_rect);
 
-        let thumb_color = if self.is_pressed {
-            SCROLL_BAR_THUMB_CLICK_COLOR
-        } else if self.is_hovered {
-            SCROLL_BAR_THUMB_HOVER_COLOR
-        } else {
-            SCROLL_BAR_THUMB_DEFAULT_COLOR
+        let thumb_color = match self.interaction_state {
+            InteractionState::Default => SCROLL_BAR_THUMB_DEFAULT_COLOR,
+            InteractionState::Hovered => SCROLL_BAR_THUMB_HOVER_COLOR,
+            InteractionState::Pressed => SCROLL_BAR_THUMB_CLICK_COLOR,
         };
 
         let thumb_rect = super::Rect::from_position_and_size(

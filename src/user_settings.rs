@@ -7,6 +7,7 @@ pub enum SettingState<T> {
     Default(T),
 
     /// The user changed the option.
+    #[allow(dead_code)] // TODO: implement settings menu
     Manual(T),
 }
 
