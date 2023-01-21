@@ -5,15 +5,20 @@ use std::time::Instant;
 use uffice_lib::math;
 use crate::user_settings::{SettingChangeSubscriber, SettingChangeNotification, SettingName};
 
-use super::{scroll::Scroller, Position};
+use super::Position;
 
 #[derive(Clone, Debug)]
 pub enum EasingFunction {
     /// Not an easing function, but will act as if the animation completed
     /// immediately.
     DisabledAnimations,
+
+    #[allow(dead_code)]
     Linear,
+
+    #[allow(dead_code)]
     CubicBezier(Position<f32>, Position<f32>, Position<f32>, Position<f32>),
+
     EaseOutQuadratic,
 }
 

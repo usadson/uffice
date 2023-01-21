@@ -32,6 +32,8 @@ const SCROLL_BAR_THUMB_HOVER_COLOR: Color = Color::from_rgb(0x65, 0x32, 0xBC);
 /// The color of the thumb of the scrollbar when it's being clicked on.
 const SCROLL_BAR_THUMB_CLICK_COLOR: Color = Color::from_rgb(0x60, 0x2B, 0xBC);
 
+const LINE_SPEED: f32 = 100.0;
+
 /// The scroller is responsible for processing the user input (mouse scrolling,
 /// thumb dragging), provides a way to calculate a thumb position and size.
 pub struct Scroller {
@@ -65,8 +67,9 @@ impl Scroller {
         }
     }
 
-    pub fn scroll(&mut self, value: f32) {
-        self.increase_thumb_position(-value);
+    /// Scroll the amount of lines specified by the `value` parameter.
+    pub fn scroll_lines(&mut self, value: f32) {
+        self.increase_thumb_position(-value / self.content_height * LINE_SPEED);
     }
 
     /// Draws the scroll bar track with the thumb.

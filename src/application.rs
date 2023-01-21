@@ -255,7 +255,7 @@ impl Tab {
                 return false;
             }
 
-            self.scroller.scroll(top);
+            self.scroller.scroll_lines(top);
             return true;
         }
 
