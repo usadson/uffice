@@ -49,6 +49,7 @@ enum PaintCommand {
         brush: Brush,
         position: Position<f32>,
         layout: mltg::TextLayout,
+        exact_size: Option<mltg::Size<f32>>,
     },
 
     BeginClipRegion {
@@ -85,6 +86,12 @@ impl From<Position<f32>> for mltg::Point<f32> {
 
 impl From<mltg::Size<f32>> for Size<f32> {
     fn from(value: mltg::Size<f32>) -> Self {
+        Self::new(value.width, value.height)
+    }
+}
+
+impl From<Size<f32>> for mltg::Size<f32> {
+    fn from(value: Size<f32>) -> Self {
         Self::new(value.width, value.height)
     }
 }
@@ -289,6 +296,42 @@ impl Win32PainterCache {
             None => None
         }
     }
+
+    pub fn find_cached_font_closest(&self, font: super::FontSpecification) -> Option<Rc<CachedFont>> {
+        match self.font_families.get(font.family_name) {
+            Some(family) => {
+                let font = Into::<FontVariantCacheKey>::into(font);
+
+                let types = &family.as_ref().borrow().types;
+
+                let mut closest_index = None;
+                let mut closest_size_diff = None;
+
+                for i in 0..types.len() {
+                    let size = types.keys().nth(i).unwrap().size;
+                    if size == font.size {
+                        closest_index = Some(i);
+                        break;
+                    }
+
+                    let size_diff = (size as i64 - font.size as i64).abs();
+
+                    if closest_index.is_none() || closest_size_diff.unwrap() > size_diff{
+                        closest_index = Some(i);
+                        closest_size_diff = Some(size_diff);
+                    }
+                }
+
+                match closest_index {
+                    None => None,
+                    Some(index) => {
+                        Some(types.values().nth(index).unwrap().clone())
+                    }
+                }
+            }
+            None => None
+        }
+    }
 }
 
 pub struct Win32TextCalculator {
@@ -340,6 +383,7 @@ pub struct Win32Painter {
     shared_cache_sources: Rc<RefCell<SharedCacheSources>>,
     caches: HashMap<super::PainterCache, Win32PainterCache>,
     current_cache: super::PainterCache,
+    quality: super::PaintQuality,
 
     selected_font: SelectOption<Rc<CachedFont>>,
 
@@ -376,6 +420,7 @@ impl Win32Painter {
             shared_cache_sources: Rc::new(RefCell::new(SharedCacheSources::new())),
             caches: HashMap::new(),
             current_cache: crate::gui::painter::PainterCache::UI,
+            quality: super::PaintQuality::Full,
 
             selected_font: SelectOption::NeverSelected,
 
@@ -439,8 +484,25 @@ impl super::Painter for Win32Painter {
                     PaintCommand::Rect { brush, rect } => {
                         target_cmd.fill(&Into::<mltg::Rect<f32>>::into(*rect), &self.translate_brush(brush));
                     }
-                    PaintCommand::Text { brush, position, layout } => {
-                        target_cmd.fill(&layout.position(*position), &self.translate_brush(brush));
+                    PaintCommand::Text { brush, position, layout, exact_size, } => {
+                        let mut position = *position;
+                        if let Some(exact_size) = exact_size.clone() {
+                            //target_cmd.push_clip(mltg::Rect::new(*position, exact_size));
+                            let scale_x = exact_size.width / layout.size().width;
+                            let scale_y = exact_size.height / layout.size().height;
+                            target_cmd.scale(mltg::Size::new(scale_x, scale_y));
+                            position = Position::new(
+                                position.x / scale_x,
+                                position.y / scale_y
+                            );
+                        }
+
+                        target_cmd.fill(&layout.position(position), &self.translate_brush(brush));
+
+                        if exact_size.is_some() {
+                            target_cmd.reset_transform();
+                            //target_cmd.pop_clip();
+                        }
                     }
                     PaintCommand::BeginClipRegion { rect } => target_cmd.push_clip(*rect),
                     PaintCommand::EndClipRegion => target_cmd.pop_clip(),
@@ -465,11 +527,15 @@ impl super::Painter for Win32Painter {
         self.commands.push(PaintCommand::Rect { brush, rect })
     }
 
-    fn paint_text(&mut self, brush: Brush, position: crate::gui::Position<f32>, text: &str) -> Size<f32> {
+    fn paint_text(&mut self, brush: Brush, position: crate::gui::Position<f32>, text: &str, size: Option<Size<f32>>) -> Size<f32> {
+        let exact_size = match size {
+            None => None,
+            Some(size) => Some(size.into())
+        };
         let layout = self.factory.create_text_layout(text, &self.selected_font.as_ref().unwrap().format, mltg::TextAlignment::Leading, None)
             .unwrap();
         let size = layout.size();
-        self.commands.push(PaintCommand::Text { brush, position, layout });
+        self.commands.push(PaintCommand::Text { brush, position, layout, exact_size });
         size.into()
     }
 
@@ -504,6 +570,13 @@ impl super::Painter for Win32Painter {
             return Ok(());
         }
 
+        if self.quality == super::PaintQuality::AvoidResourceRescalingForDetail {
+            if let Some(font) = self.current_cache().find_cached_font_closest(font_spec) {
+                self.selected_font = SelectOption::Some(font);
+                return Ok(());
+            }
+        }
+
         //
         // Load the font, since no cache contains this font.
         //
@@ -517,7 +590,8 @@ impl super::Painter for Win32Painter {
         }
     }
 
-    fn switch_cache(&mut self, cache: super::PainterCache) {
+    fn switch_cache(&mut self, cache: super::PainterCache, quality: super::PaintQuality) {
+        self.quality = quality;
         self.current_cache = cache;
         self.ensure_cache_created(cache);
         self.selected_font = SelectOption::Cleared;

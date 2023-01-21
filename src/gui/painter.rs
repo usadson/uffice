@@ -71,6 +71,24 @@ impl<'a> FontSpecification<'a> {
     }
 }
 
+/// Specifies the quality of the painter. For example, when a font is currently
+/// present, but it isn't generated with the correct size, the following
+/// behaviors differ:
+///
+/// 1. For `AvoidResourceRescalingForDetail`, the most similar font is used,
+///    scaling the text as if it was the correct size. This prevents loading
+///    extra resources for performance, but produces a worse looking image.
+///
+/// 2. For `Full`, it is resized (most likely keeping the other as well).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PaintQuality {
+    /// Avoid rescaling resources when the rescaled versions would look better.
+    AvoidResourceRescalingForDetail,
+
+    /// Always load the best quality fonts and images.
+    Full,
+}
+
 /// The PainterCache specifies which cache to use when painting. This way, we
 /// can clear a certain cache without clearing too much.
 ///
@@ -130,7 +148,7 @@ pub trait Painter {
 
     /// Paint the text using the specified brush. Returns the size of the text
     /// in pixels.
-    fn paint_text(&mut self, brush: Brush, position: Position<f32>, text: &str) -> Size<f32>;
+    fn paint_text(&mut self, brush: Brush, position: Position<f32>, text: &str, size: Option<Size<f32>>) -> Size<f32>;
 
     /// Prepare for new paint commands.
     fn reset(&mut self);
@@ -141,7 +159,7 @@ pub trait Painter {
 
     /// Switches to a certain cache. When it is not created or cleared, it will
     /// be allocated for you.
-    fn switch_cache(&mut self, cache: PainterCache);
+    fn switch_cache(&mut self, cache: PainterCache, quality: PaintQuality);
 
     /// Get the sharable text calculator.
     fn text_calculator(&mut self) -> Rc<RefCell<dyn TextCalculator>>;

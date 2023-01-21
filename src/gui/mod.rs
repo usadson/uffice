@@ -123,6 +123,16 @@ impl Size<f32> {
     }
 }
 
+impl std::ops::Mul<f32> for Size<f32> {
+    type Output = Self;
+    fn mul(self, rhs: f32) -> Self::Output {
+        Self {
+            width: self.width * rhs,
+            height: self.height * rhs,
+        }
+    }
+}
+
 impl<T> From<winit::dpi::LogicalSize<T>> for Size<T> {
     fn from(value: winit::dpi::LogicalSize<T>) -> Self {
         Self { width: value.width, height: value.height }

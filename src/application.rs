@@ -26,6 +26,7 @@ use winit::{
 use crate::gui::Brush;
 use crate::gui::Position;
 use crate::gui::Rect;
+use crate::gui::painter::PaintQuality;
 use crate::gui::{
     AppEvent,
     Color,
@@ -287,6 +288,8 @@ pub struct App {
 
     keyboard: uffice_lib::Keyboard,
     user_settings: UserSettings,
+
+    previous_frame_had_running_animations: bool,
 }
 
 impl App {
@@ -301,6 +304,8 @@ impl App {
 
             keyboard: uffice_lib::Keyboard::new(),
             user_settings: UserSettings::load(),
+
+            previous_frame_had_running_animations: false,
         };
 
         app.add_tab(PathBuf::from(first_file_to_open));
@@ -429,17 +434,27 @@ impl crate::gui::app::GuiApp for App {
             Rect::from_position_and_size(Position::new(0.0, 0.0), window_size));
 
         if let Some(current_tab_id) = self.current_visible_tab {
-            event.painter.as_ref().borrow_mut().switch_cache(PainterCache::Document(current_tab_id.0));
-
             let current_tab = self.tabs.get_mut(&current_tab_id).unwrap();
+
+            let has_animations = current_tab.has_running_animations();
+            let quality = if has_animations {
+                PaintQuality::AvoidResourceRescalingForDetail
+            } else {
+                PaintQuality::Full
+            };
+            event.painter.as_ref().borrow_mut().switch_cache(PainterCache::Document(current_tab_id.0), quality);
             current_tab.on_paint(&event);
 
             let mut painter = event.painter.as_ref().borrow_mut();
-            painter.switch_cache(PainterCache::UI);
+            painter.switch_cache(PainterCache::UI, PaintQuality::Full);
 
             current_tab.scroller.paint(event.window, &mut *painter);
 
-            if current_tab.has_running_animations() {
+            if has_animations {
+                event.should_redraw_again = true;
+                self.previous_frame_had_running_animations = true;
+            } else if self.previous_frame_had_running_animations {
+                self.previous_frame_had_running_animations = false;
                 event.should_redraw_again = true;
             }
         }

@@ -199,7 +199,7 @@ impl DocumentView {
                         event.painter.select_font(FontSpecification::new(&font_family_name, text_size, node.text_settings.font_weight())).unwrap();
 
                         //let size =
-                        event.painter.paint_text(node.text_settings.brush(), position, &part.text);
+                        event.painter.paint_text(node.text_settings.brush(), position, &part.text, Some(node.size * event.zoom));
                         //println!("Text \"{}\" for size {} and dims {:?}", part.text, text_size, size);
                     }
                     _ => ()
