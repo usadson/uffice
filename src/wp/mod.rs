@@ -23,6 +23,8 @@ use crate::{
 
 #[derive(Debug, strum_macros::IntoStaticStr)]
 pub enum NodeData {
+    /// Line, column or page break.
+    Break,
     Document(Document),
     Drawing(crate::drawing_ml::DrawingObject),
     Hyperlink(Hyperlink),
@@ -354,5 +356,34 @@ impl Hyperlink {
 
 #[derive(Debug, Default)]
 pub struct StructuredDocumentTag {
+
+}
+
+#[derive(Debug)]
+pub enum BreakType {
+    Column,
+
+    Page,
+
+    /// Line break
+    TextWrapping,
+}
+
+impl BreakType {
+
+    pub fn from_string(string: Option<&str>) -> Self {
+        match string {
+            None => BreakType::TextWrapping,
+            Some(string) => match string {
+                "column" => BreakType::Column,
+                "page" => BreakType::Page,
+                "textWrapping" => BreakType::TextWrapping,
+                _ => {
+                    println!("[WP] Warning: unknown BreakType for string \"{}\"", string);
+                    BreakType::TextWrapping
+                }
+            }
+        }
+    }
 
 }

@@ -18,7 +18,7 @@ use crate::{
     error::Error,
     relationships::Relationships,
     wp::{
-        Document, Node, numbering
+        Document, Node, numbering, layout::LineLayout
     },
     gui::painter::{TextCalculator, FontSpecification},
     style::StyleManager,
@@ -191,6 +191,26 @@ fn process_body_element(context: &mut Context,
     }
 
     position
+}
+
+fn process_break_element(parent: &Rc<RefCell<Node>>, line_layout: &mut LineLayout, node: &xml::Node) {
+    let break_type = wp::BreakType::from_string(node.attribute((WORD_PROCESSING_XML_NAMESPACE, "type")));
+    match break_type {
+        wp::BreakType::Page => {
+            line_layout.reset();
+
+            let next_page = parent.borrow_mut().page_last + 1;
+
+            let child = wp::create_child(parent.clone(), wp::NodeData::Break);
+            let mut child = child.borrow_mut();
+            child.page_first = next_page;
+            child.position = line_layout.position_on_line;
+            child.set_last_page_number(next_page);
+        }
+        _ => {
+            println!("[WP] TODO: unknown break type: \"{:?}\"", break_type);
+        }
+    }
 }
 
 fn process_hyperlink_element(context: &mut Context,
@@ -614,6 +634,7 @@ pub fn process_text_element_text(parent: Rc<RefCell<Node>>, line_layout: &mut wp
                 page_number += 1;
                 parent.borrow_mut().set_last_page_number(page_number);
                 position.y = line_layout.page_vertical_start;
+                line_layout.reset();
             }
 
             position.x = line_layout.page_horizontal_start;
@@ -708,6 +729,21 @@ fn process_text_run_element(context: &mut Context,
 
     for text_run_property in node.children() {
         match text_run_property.tag_name().name() {
+            // 17.3.3.1 br (Break)
+            "br" => {
+                process_break_element(&text_run, line_layout, &text_run_property);
+
+                // TODO: phase out the following code when the `position`
+                //       parameters are fully replaced by the LineLayout
+                //       system.
+                if let Some(children) = &text_run.borrow().children {
+                    if let Some(child) = children.last() {
+                        position = child.borrow().position;
+                    }
+                }
+                // End TODO
+            }
+
             "drawing" => {
                 position = process_drawing_element(context, text_run.clone(), &text_run_property, position);
             }

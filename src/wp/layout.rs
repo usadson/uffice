@@ -38,6 +38,17 @@ impl LineLayout {
         }
     }
 
+    pub fn new_line(&mut self) {
+        let new_y = self.position_on_line.y + self.line_height;
+        self.position_on_line = Vector2f::new(self.page_horizontal_start, new_y);
+        self.line_height = 0.0;
+    }
+
+    pub fn reset(&mut self) {
+        self.position_on_line = Vector2f::new(self.page_horizontal_start, self.page_vertical_start);
+        self.line_height = 0.0;
+    }
+
     pub fn line_height(&self) -> f32 {
         self.line_height
     }
