@@ -225,6 +225,10 @@ impl Tab {
     }
 
     fn on_paint(&mut self, event: &crate::gui::app::PaintEvent) {
+        if self.state == TabState::Loading {
+            return;
+        }
+
         assert!(event.painter.try_borrow_mut().is_ok(), "Failed to painter borrow as mutable; we can never send the PaintEvent to the tab!");
 
         let size = event.window.inner_size().to_logical(event.window.scale_factor());
