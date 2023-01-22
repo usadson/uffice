@@ -394,21 +394,12 @@ pub struct Win32Painter {
 
 impl Win32Painter {
     pub fn new(window: &mut Window) -> Result<Self, Error> {
-        println!("Creating context");
         let context = mltg::Context::new(mltg::Direct2D::new()?)?;
-        println!("Created  context");
-
         let factory = context.create_factory();
-        println!("Created  factory");
 
         let window_size = window.inner_size();
-        println!("Mapped   window size: {:?}", window_size);
-
-        println!("Creating render target for window {:?}", window.raw_window_handle());
         let render_target = context.create_render_target(
             window.raw_window_handle(), (window_size.width, window_size.height)).unwrap();
-
-        println!("Created  render target");
 
         let painter = Self {
             window_size: window.inner_size(),
@@ -487,10 +478,9 @@ impl super::Painter for Win32Painter {
                     PaintCommand::Text { brush, position, layout, exact_size, } => {
                         let mut position = *position;
                         if let Some(exact_size) = exact_size.clone() {
-                            //target_cmd.push_clip(mltg::Rect::new(*position, exact_size));
                             let scale_x = exact_size.width / layout.size().width;
                             let scale_y = exact_size.height / layout.size().height;
-                            // target_cmd.scale(mltg::Size::new(scale_x, scale_y));
+                            target_cmd.scale(mltg::Size::new(scale_x, scale_y));
                             position = Position::new(
                                 position.x / scale_x,
                                 position.y / scale_y
@@ -501,7 +491,6 @@ impl super::Painter for Win32Painter {
 
                         if exact_size.is_some() {
                             target_cmd.reset_transform();
-                            //target_cmd.pop_clip();
                         }
                     }
                     PaintCommand::BeginClipRegion { rect } => target_cmd.push_clip(*rect),
