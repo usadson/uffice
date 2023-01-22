@@ -160,13 +160,27 @@ impl InterpolatedValue {
 }
 
 /// The zoom levels the user can step through using control + or control -.
-const ZOOM_LEVELS: [f32; 19] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.2, 1.33, 1.5, 1.7, 2.0, 2.5, 3.0, 4.0, 5.0];
+const ZOOM_LEVELS: [f32; 31] = [
+    0.001, 0.002, 0.003, 0.004, 0.005, 0.0067, 0.075,
+    0.1, 0.2, 0.3, 0.4, 0.5, 0.67, 0.8, 0.9,
+    1.0,
+    1.1, 1.2, 1.33, 1.5, 1.7,
+    2.0, 2.5,
+    3.0,
+    4.0,
+    5.0,
+    6.7,
+    7.5,
+    10.0,
+    15.0,
+    20.0
+];
 
 /// Zoom animation speed/duration in milliseconds.
 /// TODO: Change this to from f32 to Duration.
 const ZOOM_ANIMATION_SPEED: f32 = 150.0;
 
-const DEFAULT_ZOOM_LEVEL_INDEX: usize = 4;
+const DEFAULT_ZOOM_LEVEL_INDEX: usize = 15;
 
 const ZOOM_EASING_FUNCTION: EasingFunction = EasingFunction::EaseOutQuadratic;
 
