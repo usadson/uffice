@@ -319,8 +319,6 @@ impl Hyperlink {
             Event::Hover(mouse_event) => {
                 mouse_event.new_cursor = Some(CursorType::Hand);
             }
-
-            _ => ()
         }
     }
 
