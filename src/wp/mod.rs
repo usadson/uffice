@@ -206,7 +206,7 @@ impl Node {
     }
 }
 
-pub fn append_child<'b>(parent_ref: Rc<RefCell<Node>>, mut node: Node) -> Rc<RefCell<Node>> {
+pub fn append_child<'b>(parent_ref: &Rc<RefCell<Node>>, mut node: Node) -> Rc<RefCell<Node>> {
     let mut parent = parent_ref.borrow_mut();
     node.parent = Rc::downgrade(&parent_ref);
     node.text_settings = parent.text_settings.clone();
@@ -222,7 +222,7 @@ pub fn append_child<'b>(parent_ref: Rc<RefCell<Node>>, mut node: Node) -> Rc<Ref
     panic!("Node isn't allowed to have children: {:?}", parent.data);
 }
 
-pub fn create_child(parent_ref: Rc<RefCell<Node>>, data: NodeData) -> Rc<RefCell<Node>> {
+pub fn create_child(parent_ref: &Rc<RefCell<Node>>, data: NodeData) -> Rc<RefCell<Node>> {
     let mut parent = parent_ref.borrow_mut();
     let node = Node {
         parent: Rc::downgrade(&parent_ref),

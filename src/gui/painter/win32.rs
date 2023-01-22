@@ -490,7 +490,7 @@ impl super::Painter for Win32Painter {
                             //target_cmd.push_clip(mltg::Rect::new(*position, exact_size));
                             let scale_x = exact_size.width / layout.size().width;
                             let scale_y = exact_size.height / layout.size().height;
-                            target_cmd.scale(mltg::Size::new(scale_x, scale_y));
+                            // target_cmd.scale(mltg::Size::new(scale_x, scale_y));
                             position = Position::new(
                                 position.x / scale_x,
                                 position.y / scale_y

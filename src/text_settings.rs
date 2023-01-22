@@ -110,7 +110,7 @@ pub struct Numbering {
     pub level: Option<i32>,
 }
 impl Numbering {
-    pub fn create_node(&self, paragraph: Rc<RefCell<crate::wp::Node>>, line_layout: &mut LineLayout,
+    pub fn create_node(&self, paragraph: &Rc<RefCell<crate::wp::Node>>, line_layout: &mut LineLayout,
                        text_calculator: &mut dyn TextCalculator) -> Rc<RefCell<crate::wp::Node>> {
         assert!(paragraph.try_borrow_mut().is_ok());
         let numbering_definition_instance = &self.definition
@@ -135,10 +135,10 @@ impl Numbering {
 
         // See the documentation of NodeData::NumberingParent for why we need
         // this parent and not just inherit from the parent Paragraph.
-        let numbering_parent = crate::wp::create_child(paragraph.clone(), crate::wp::NodeData::NumberingParent);
+        let numbering_parent = crate::wp::create_child(&paragraph, crate::wp::NodeData::NumberingParent);
         numbering_parent.borrow_mut().text_settings = self.combine_text_settings(&paragraph.as_ref().borrow(), &level);
 
-        crate::word_processing::append_text_element(&displayed_text, numbering_parent.clone(), line_layout, text_calculator);
+        crate::word_processing::append_text_element(&displayed_text, &numbering_parent, line_layout, text_calculator);
         let numbering_parent = numbering_parent.as_ref().borrow();
         numbering_parent.children.as_ref().unwrap().last().unwrap().clone()
     }
