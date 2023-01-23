@@ -7,6 +7,7 @@ mod drawing_ml;
 mod error;
 mod fonts;
 mod gui;
+mod platform;
 mod relationships;
 mod style;
 mod text_settings;

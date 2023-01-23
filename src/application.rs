@@ -3,6 +3,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -90,6 +91,12 @@ enum TooltipState {
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct TabId(usize);
 
+impl Display for TabId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 unsafe impl Sync for TabId {}
 unsafe impl Send for TabId {}
 
@@ -140,7 +147,9 @@ impl Tab {
         let (finished_paint_sender, finished_paint_receiver) = channel();
 
         let path_str = path.to_str().unwrap().to_owned();
-        std::thread::spawn(move || {
+        std::thread::Builder::new()
+                .name(format!("Tab Manager #{}", id))
+                .spawn(move || {
             let proxy: EventLoopProxy<AppEvent> = proxy_rx.recv().unwrap();
             drop(proxy_rx);
 
@@ -201,7 +210,7 @@ impl Tab {
                     }
                 }
             }
-        });
+        }).unwrap();
 
         proxy_tx.send(event_loop_proxy.clone()).unwrap();
         drop(proxy_tx);
@@ -376,6 +385,13 @@ impl App {
 
             VirtualKeyCode::Key0 => {
                 self.broadcast_setting_changed(SettingChangeOrigin::System, SettingName::EnableAnimations);
+            }
+
+            VirtualKeyCode::F10 => {
+                if let Some(current_tab_id) = self.current_visible_tab {
+                    let current_tab = self.tabs.get(&current_tab_id).unwrap();
+                    crate::platform::open_file_user(current_tab.path.to_str().unwrap());
+                }
             }
 
             _ => ()

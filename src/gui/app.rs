@@ -65,6 +65,8 @@ pub fn run<F>(app_creator: F)
     let event_loop = EventLoopBuilder::with_user_event()
         .build();
 
+    crate::platform::set_current_thread_name("UI Thread");
+
     let proxy = event_loop.create_proxy();
 
     let mut window = WindowBuilder::new()
