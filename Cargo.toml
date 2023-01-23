@@ -6,7 +6,7 @@ license = "BSD-2-Clause"
 name = "uffice"
 publish = false
 repository = "https://github.com/usadson/uffice"
-version = "0.2.0"
+version = "0.2.1"
 default-run = "uffice"
 
 [dependencies]
@@ -17,7 +17,7 @@ dotenv = "*"
 font-kit = "*"
 notify = "*"
 roxmltree = "*"
-raw-window-handle = "*"
+raw-window-handle = "0.5.0"
 sfml = "*"
 structopt = "*"
 strum_macros = "*"
@@ -42,6 +42,7 @@ windows = { version = "*", features = [
     "Win32_Graphics_Direct3D11",
     "Win32_Graphics_Dxgi_Common",
     "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
     "Win32_System_Registry",
     "Win32_System_Threading",
     "Win32_UI_Shell",

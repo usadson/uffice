@@ -2,17 +2,28 @@
 // All Rights Reserved.
 
 use windows::{
-    core::PCWSTR,
+    core::{
+        PCSTR,
+        PCWSTR,
+        HRESULT,
+    },
     w,
     Win32::{
-        Foundation::{HWND, GetLastError},
+        Foundation::{
+            GetLastError,
+            HANDLE,
+            HWND,
+        },
         UI::{
             Shell::ShellExecuteW,
             WindowsAndMessaging::SW_SHOWNORMAL,
         },
+        System::LibraryLoader::{
+            GetProcAddress,
+            LoadLibraryA,
+        },
         System::Threading::{
             GetCurrentThread,
-            SetThreadDescription,
         },
     },
 };
@@ -53,9 +64,22 @@ pub fn open_file_user(path: &str) {
     // })()
 }
 
+pub unsafe fn load_symbol(library_name: &str, symbol_name: &str) -> Option<unsafe extern "system" fn() -> isize> {
+    let Ok(kernel) = LoadLibraryA(PCSTR(library_name.as_ptr())) else {
+        return None;
+    };
+
+    GetProcAddress(kernel, PCSTR(symbol_name.as_ptr()))
+}
+
 pub fn set_current_thread_name(name: &str) {
     let name: Vec<u16> = name.encode_utf16().collect();
+    type FuncType = unsafe extern "system" fn(hthread: HANDLE, lpthreaddescription: PCWSTR) -> HRESULT;
+
     unsafe {
-        _ = SetThreadDescription(GetCurrentThread(), PCWSTR(name.as_ptr()));
+        if let Some(func) = load_symbol("Kernel32.dll", "SetThreadDescription") {
+            let func: FuncType = std::mem::transmute(func);
+            _ = func(GetCurrentThread(), PCWSTR(name.as_ptr()));
+        }
     }
 }
