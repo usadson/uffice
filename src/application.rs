@@ -306,9 +306,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(window: &mut winit::window::Window, event_loop_proxy: EventLoopProxy<AppEvent>, first_file_to_open: String) -> Self {
-        window.set_title(&format!("{} - {}", crate::gui::app::formatted_base_title(), first_file_to_open));
-
+    pub fn new(window: &mut winit::window::Window, event_loop_proxy: EventLoopProxy<AppEvent>, files_to_open: Vec<String>) -> Self {
         let mut app = Self {
             event_loop_proxy,
             next_tab_id: 1000,
@@ -321,12 +319,15 @@ impl App {
             previous_frame_had_running_animations: false,
         };
 
-        app.add_tab(PathBuf::from(first_file_to_open));
+        for file in files_to_open {
+            app.add_tab(file.into(), window);
+        }
 
         app
     }
 
-    fn add_tab(&mut self, path: PathBuf) {
+    fn add_tab(&mut self, path: PathBuf, window: &mut winit::window::Window) {
+        let path = path.canonicalize().unwrap_or(path);
         let tab_id = TabId(self.next_tab_id);
         self.next_tab_id += 1;
 
@@ -334,11 +335,18 @@ impl App {
         tab.settings_loaded(&self.user_settings);
         self.tabs.insert(tab_id, tab);
 
-        if self.current_visible_tab.is_some() {
-            return;
+        self.save_restore_point();
+
+        if self.current_visible_tab.is_none() {
+            self.switch_to_tab(tab_id, window);
         }
+    }
+
+    fn switch_to_tab(&mut self, tab_id: TabId, window: &mut winit::window::Window) {
+        window.set_title(&format!("{} - {}", crate::gui::app::formatted_base_title(), self.tabs.get(&tab_id).unwrap().path.display()));
 
         self.current_visible_tab = Some(tab_id);
+        window.request_redraw();
     }
 
     fn handle_user_event(&mut self, window: &mut winit::window::Window, event: AppEvent) {
@@ -394,6 +402,13 @@ impl App {
                 }
             }
 
+            #[cfg(debug_assertions)]
+            VirtualKeyCode::Pause => {
+                loop {
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+            }
+
             _ => ()
         }
     }
@@ -405,6 +420,16 @@ impl App {
         for tab in self.tabs.values_mut() {
             tab.setting_changed(&notification);
         }
+    }
+
+    /// Saves the current state in case that the application crashes or the
+    /// system is rebooted automatically.
+    fn save_restore_point(&mut self) {
+        crate::platform::save_restore_arguments(crate::CommandLineArguments{
+            files: self.tabs.values().map(|tab| tab.path.to_str().unwrap().to_owned()).collect(),
+
+            ..Default::default()
+        })
     }
 }
 

@@ -22,9 +22,9 @@ use windows::{
             GetProcAddress,
             LoadLibraryA,
         },
-        System::Threading::{
+        System::{Threading::{
             GetCurrentThread,
-        },
+        }, Recovery::RegisterApplicationRestart},
     },
 };
 
@@ -81,5 +81,27 @@ pub fn set_current_thread_name(name: &str) {
             let func: FuncType = std::mem::transmute(func);
             _ = func(GetCurrentThread(), PCWSTR(name.as_ptr()));
         }
+    }
+}
+
+/// Saves the current state in case that the application crashes or the system
+/// is rebooted automatically.
+///
+/// Warning: This function does not compile for Windows versions prior to Vista.
+pub fn save_restore_arguments(arguments: crate::CommandLineArguments) {
+    let args: Vec<u16> = arguments.files
+        .join(" ")
+        .encode_utf16()
+        .collect();
+
+    let result = unsafe {
+        RegisterApplicationRestart(PCWSTR(args.as_ptr()), Default::default())
+    };
+
+    println!("Saving state: {:?}", result);
+
+    #[cfg(debug_assertions)]
+    if let Err(err) = result {
+        println!("[Win32] Failed to register application restart: {:?}", err);
     }
 }

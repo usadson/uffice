@@ -14,3 +14,9 @@ pub fn open_file_user(path: &str) {
 pub fn set_current_thread_name(name: &str) {
     implementation::set_current_thread_name(name);
 }
+
+/// Saves the current state in case that the application crashes or the system
+/// is rebooted automatically.
+pub fn save_restore_arguments(arguments: crate::CommandLineArguments) {
+    implementation::save_restore_arguments(arguments)
+}
