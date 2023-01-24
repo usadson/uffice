@@ -52,7 +52,7 @@ impl Scroller {
     /// Instantiates a new scroller.
     pub fn new() -> Self {
         Self {
-            value: InterpolatedValue::new(0.0, 150.0, Self::EASING_FUNC),
+            value: InterpolatedValue::new(0.0, 150.0, Self::EASING_FUNC, 0.0..1.0),
             content_height: 0.0,
             window_height: 0.0,
 

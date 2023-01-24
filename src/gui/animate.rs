@@ -1,7 +1,7 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::time::Instant;
+use std::{time::Instant, ops::Range};
 use uffice_lib::math;
 use crate::user_settings::{SettingChangeSubscriber, SettingChangeNotification, SettingName};
 
@@ -127,9 +127,7 @@ impl Animator {
             self.finished = true;
             1.0
         } else {
-            let result = self.easing_function.apply(value);
-            println!("Animator {} => {}", value, result);
-            result
+            self.easing_function.apply(value)
         }
     }
 }
@@ -139,6 +137,7 @@ pub struct InterpolatedValue {
     animator: Animator,
     start_value: f32,
     end_value: f32,
+    bounds: Range<f32>
 }
 
 impl Animated for InterpolatedValue {
@@ -148,19 +147,20 @@ impl Animated for InterpolatedValue {
 }
 
 impl InterpolatedValue {
-    pub fn new(start_value: f32, duration_ms: f32, easing_function: EasingFunction) -> Self {
+    pub fn new(start_value: f32, duration_ms: f32, easing_function: EasingFunction, bounds: Range<f32>) -> Self {
         Self {
             animator: Animator::new_with_delay(duration_ms, easing_function),
             start_value,
-            end_value: start_value
+            end_value: start_value,
+            bounds
         }
     }
 
     pub fn change(&mut self, new_value: f32) {
         self.start_value = self.get();
         self.end_value = match new_value {
-            d if d < 0.0 => 0.0,
-            d if d > 1.0 => 1.0,
+            d if d < self.bounds.start => self.bounds.start,
+            d if d > self.bounds.end => self.bounds.end,
             d => d,
         };
         self.animator.reset();
@@ -218,7 +218,7 @@ impl Zoomer {
     pub fn new() -> Self {
         Self {
             zoom_index: DEFAULT_ZOOM_LEVEL_INDEX,
-            zoom_level: InterpolatedValue::new(ZOOM_LEVELS[DEFAULT_ZOOM_LEVEL_INDEX], ZOOM_ANIMATION_SPEED, ZOOM_EASING_FUNCTION),
+            zoom_level: InterpolatedValue::new(ZOOM_LEVELS[DEFAULT_ZOOM_LEVEL_INDEX], ZOOM_ANIMATION_SPEED, ZOOM_EASING_FUNCTION, 0.0..f32::MAX),
         }
     }
 
