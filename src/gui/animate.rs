@@ -127,7 +127,9 @@ impl Animator {
             self.finished = true;
             1.0
         } else {
-            self.easing_function.apply(value)
+            let result = self.easing_function.apply(value);
+            println!("Animator {} => {}", value, result);
+            result
         }
     }
 }
@@ -137,6 +139,12 @@ pub struct InterpolatedValue {
     animator: Animator,
     start_value: f32,
     end_value: f32,
+}
+
+impl Animated for InterpolatedValue {
+    fn has_running_animation(&self) -> bool {
+        !self.animator.is_finished()
+    }
 }
 
 impl InterpolatedValue {
@@ -150,12 +158,24 @@ impl InterpolatedValue {
 
     pub fn change(&mut self, new_value: f32) {
         self.start_value = self.get();
-        self.end_value = new_value;
+        self.end_value = match new_value {
+            d if d < 0.0 => 0.0,
+            d if d > 1.0 => 1.0,
+            d => d,
+        };
         self.animator.reset();
+    }
+
+    pub fn increase(&mut self, delta: f32) {
+        self.change(self.end_value + delta);
     }
 
     pub fn get(&mut self) -> f32 {
         math::lerp_precise_f32(self.start_value, self.end_value, self.animator.update())
+    }
+
+    pub fn set_easing_function(&mut self, function: EasingFunction) {
+        self.animator.easing_function = function;
     }
 }
 
@@ -245,11 +265,13 @@ impl Animated for Zoomer {
 
 impl SettingChangeSubscriber for Zoomer {
     fn settings_loaded(&mut self, settings: &crate::user_settings::UserSettings) {
-        self.zoom_level.animator.easing_function = if settings.setting_enable_animations() {
-            ZOOM_EASING_FUNCTION
-        } else {
-            EasingFunction::DisabledAnimations
-        }
+        self.zoom_level.set_easing_function(
+            if settings.setting_enable_animations() {
+                ZOOM_EASING_FUNCTION
+            } else {
+                EasingFunction::DisabledAnimations
+            }
+        );
     }
 
     fn setting_changed(&mut self, notification: &SettingChangeNotification) {
