@@ -166,8 +166,16 @@ impl InterpolatedValue {
         self.animator.reset();
     }
 
-    pub fn increase(&mut self, delta: f32) {
-        self.change(self.end_value + delta);
+    // Returns whether or not it has changed.
+    pub fn increase(&mut self, delta: f32) -> bool {
+        match self.end_value + delta {
+            new_value if new_value < self.bounds.start => false,
+            new_value if new_value > self.bounds.end => false,
+            new_value => {
+                self.change(new_value);
+                true
+            }
+        }
     }
 
     pub fn get(&mut self) -> f32 {

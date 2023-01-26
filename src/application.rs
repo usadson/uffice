@@ -267,8 +267,7 @@ impl Tab {
                 return false;
             }
 
-            self.scroller.scroll_lines(top);
-            return true;
+            return self.scroller.scroll_lines(top);
         }
 
         return false;
@@ -502,12 +501,15 @@ impl crate::gui::app::GuiApp for App {
                 event.should_redraw_again = true;
             }
         }
+
+        self.paint_status_bar(event.painter.borrow_mut(), window_size);
     }
 
     /// This function is called in response to a `AppEvent::PainterRequest`.
     fn receive_painter(&mut self, painter: Arc<RefCell<dyn Painter>>) {
         for tab in self.tabs.values() {
             if tab.state == TabState::Loading {
+                assert!(tab.finished_paint_receiver.try_recv().is_err());
                 tab.tab_event_sender.send(TabEvent::Layout { painter: painter.clone() }).unwrap();
                 tab.finished_paint_receiver.recv().unwrap();
             }

@@ -64,8 +64,9 @@ impl Scroller {
     }
 
     /// Scroll the amount of lines specified by the `value` parameter.
-    pub fn scroll_lines(&mut self, value: f32) {
-        self.value.increase(-value / self.content_height * LINE_SPEED);
+    /// Returns whether or not the scroller has scrolled.
+    pub fn scroll_lines(&mut self, value: f32) -> bool {
+        self.value.increase(-value / self.content_height * LINE_SPEED)
     }
 
     /// Draws the scroll bar track with the thumb.
