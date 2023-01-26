@@ -177,7 +177,6 @@ impl Tab {
                         let mut text_calculator = text_calculator.as_ref().borrow_mut();
                         view = Some(View::Document(crate::gui::view::document_view::DocumentView::new(&path_str, &mut *text_calculator)));
 
-                        assert!(painter.try_borrow_mut().is_ok(), "Borrow painter as mutable failed after getting text calculator?");
                         proxy.send_event(AppEvent::TabBecameReady(id)).unwrap();
                     }
                     TabEvent::Paint{ painter, window_size, start_y, zoom } => {
