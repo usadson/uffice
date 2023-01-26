@@ -149,6 +149,7 @@ impl DocumentView {
             let page_size = Size::new(page_width, page_height);
             let start_x = (event.window_size.width as f32 - page_width) / 2.0;
 
+            self.page_rects.clear();
             let start_y_pages = (first_page..(last_page + 1)).map(|index| {
                 let page_size_and_margin = (VERTICAL_PAGE_GAP + page_settings.size.height as f32 * TWELFTEENTH_POINT) * event.zoom;
                 let start_y = event.start_y + VERTICAL_PAGE_MARGIN * event.zoom + index as f32 * page_size_and_margin;
@@ -241,7 +242,7 @@ impl super::ViewImpl for DocumentView {
     /// scroll.
     fn calculate_content_height(&self) -> f32 {
         match self.page_rects.last() {
-            Some(page_rect) => page_rect.bottom,
+            Some(page_rect) => page_rect.bottom - self.page_rects.first().unwrap().top,
             None => 0.0
         }
     }
