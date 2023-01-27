@@ -19,6 +19,7 @@ use windows::Win32::UI::WindowsAndMessaging::MB_OK;
 use windows::Win32::UI::WindowsAndMessaging::MessageBoxA;
 use winit::event::ElementState;
 use winit::event::VirtualKeyCode;
+use winit::event::WindowEvent;
 use winit::window::Window;
 use winit::{
     event::{
@@ -380,7 +381,7 @@ impl App {
         app
     }
 
-    fn add_tab(&mut self, path: PathBuf, window: &mut winit::window::Window) {
+    fn add_tab(&mut self, path: PathBuf, window: &mut winit::window::Window) -> TabId {
         let path = path.canonicalize().unwrap_or(path);
         let tab_id = TabId(self.next_tab_id);
         self.next_tab_id += 1;
@@ -394,6 +395,8 @@ impl App {
         if self.current_visible_tab.is_none() {
             self.switch_to_tab(tab_id, window);
         }
+
+        tab_id
     }
 
     fn switch_to_tab(&mut self, tab_id: TabId, window: &mut winit::window::Window) {
@@ -545,6 +548,12 @@ impl crate::gui::app::GuiApp for App {
                         window.request_redraw();
                     }
                 }
+            }
+
+            Event::WindowEvent { event: WindowEvent::DroppedFile(path), .. } => {
+                let new_tab = self.add_tab(path, window);
+                self.current_visible_tab = Some(new_tab);
+                window.request_redraw();
             }
 
             Event::DeviceEvent { event: DeviceEvent::Key(keyboard), .. } => {
