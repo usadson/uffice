@@ -31,6 +31,8 @@ use winit::{
 use crate::gui::Brush;
 use crate::gui::Position;
 use crate::gui::Rect;
+use crate::gui::painter::FontSpecification;
+use crate::gui::painter::FontWeight;
 use crate::gui::painter::PaintQuality;
 use crate::gui::{
     AppEvent,
@@ -505,6 +507,19 @@ impl App {
 
             ..Default::default()
         })
+    }
+
+    fn paint_status_bar(&self, mut painter: RefMut<dyn Painter>, window_size: Size<f32>) {
+        let size = Size::new(window_size.width(), 15.0);
+        let padding = 3.3;
+
+        let position = Position::new(0.0, window_size.height() - size.height());
+        painter.paint_rect(Brush::SolidColor(Color::from_rgb(0x22, 0x22, 0x22)),
+                Rect::from_position_and_size(position, size));
+
+        painter.select_font(FontSpecification::new("Segoe UI", 8.0, FontWeight::Regular)).unwrap();
+        painter.paint_text(Brush::SolidColor(Color::from_rgb(0xCC, 0xCC, 0xCC)), Position::new(padding, position.y()), "1238 words", None);
+        drop(painter);
     }
 }
 
