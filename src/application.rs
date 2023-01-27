@@ -472,6 +472,9 @@ impl App {
                 self.broadcast_setting_changed(SettingChangeOrigin::System, SettingName::EnableAnimations);
             }
 
+            #[cfg(debug_assertions)]
+            VirtualKeyCode::F9 => window.request_redraw(),
+
             VirtualKeyCode::F10 => {
                 if let Some(current_tab_id) = self.current_visible_tab {
                     let current_tab = self.tabs.get(&current_tab_id).unwrap();
