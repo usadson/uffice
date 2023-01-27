@@ -253,7 +253,12 @@ pub enum AppEvent {
 
         /// The total height of the content in pixels.
         total_content_height: f32,
-    }
+    },
+
+    TabCrashed {
+        tab_id: TabId,
+    },
+
 }
 
 unsafe impl Send for AppEvent {}

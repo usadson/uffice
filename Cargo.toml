@@ -36,6 +36,7 @@ mltg = { version = "*", git = "https://github.com/usadson/mltg", branch = "main"
 registry = "*"
 utfx = "*"
 windows = { version = "*", features = [
+    "UI_Popups",
     "Win32_Foundation",
     "Win32_Graphics_Direct2D",
     "Win32_Graphics_Direct2D_Common",

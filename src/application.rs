@@ -2,6 +2,7 @@
 // All Rights Reserved.
 
 use std::cell::RefCell;
+use std::cell::RefMut;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::PathBuf;
@@ -13,6 +14,9 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 use windows::Win32::System::Com::CoInitialize;
+use windows::Win32::UI::WindowsAndMessaging::MB_ICONERROR;
+use windows::Win32::UI::WindowsAndMessaging::MB_OK;
+use windows::Win32::UI::WindowsAndMessaging::MessageBoxA;
 use winit::event::ElementState;
 use winit::event::VirtualKeyCode;
 use winit::window::Window;
@@ -100,10 +104,12 @@ impl Display for TabId {
 unsafe impl Sync for TabId {}
 unsafe impl Send for TabId {}
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum TabState {
     Loading,
     Ready,
+    Crashed,
+    Finished,
 }
 
 enum TabEvent {
@@ -125,8 +131,26 @@ pub struct TabFinishPaintInfo {
     content_height: f32
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum TabCrashKind {
+    Win32ComFailure(String)
+}
+
+unsafe impl Send for TabCrashKind {}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct TabCrashReason {
+    pub origin: &'static str,
+    pub description: &'static str,
+    pub kind: TabCrashKind,
+}
+
+unsafe impl Send for TabCrashReason {}
+
 pub struct Tab {
     state: TabState,
+    join_handle: Option<std::thread::JoinHandle<Result<(), TabCrashReason>>>,
+    crash_reason: Option<TabCrashReason>,
 
     #[allow(dead_code)] // this will be used in the future for saving
     path: PathBuf,
@@ -147,17 +171,25 @@ impl Tab {
         let (finished_paint_sender, finished_paint_receiver) = channel();
 
         let path_str = path.to_str().unwrap().to_owned();
-        std::thread::Builder::new()
+        let join_handle = std::thread::Builder::new()
                 .name(format!("Tab Manager #{}", id))
-                .spawn(move || {
+                .spawn(move || -> Result<(), TabCrashReason> {
             let proxy: EventLoopProxy<AppEvent> = proxy_rx.recv().unwrap();
             drop(proxy_rx);
 
             let mut view = None;
             proxy.send_event(AppEvent::PainterRequest).unwrap();
 
+            #[cfg(windows)]
             unsafe {
-                CoInitialize(None).expect("Failed to initialize COM, this is needed because this is another thread. Maybe we could look into MTA using roapi?");
+                if let Err(err) = CoInitialize(None) {
+                    _ = proxy.send_event(AppEvent::TabCrashed { tab_id: id });
+                    return Err(TabCrashReason{
+                        origin: "CoInitialize",
+                        description: "Failed to initialize COM, this is needed because this is another thread. Maybe we could look into MTA using roapi?",
+                        kind: TabCrashKind::Win32ComFailure(err.to_string())
+                    });
+                }
             }
 
             for event in tab_event_receiver {
@@ -209,6 +241,8 @@ impl Tab {
                     }
                 }
             }
+
+            Ok(())
         }).unwrap();
 
         proxy_tx.send(event_loop_proxy.clone()).unwrap();
@@ -216,6 +250,8 @@ impl Tab {
 
         Self {
             state: TabState::Loading,
+            join_handle: Some(join_handle),
+            crash_reason: None,
             path,
             scroller: Scroller::new(),
             zoomer: Zoomer::new(),
@@ -230,6 +266,24 @@ impl Tab {
 
     pub fn on_tab_painted(&mut self, total_content_height: f32) {
         self.scroller.content_height = total_content_height;
+    }
+
+    pub fn check_state(&mut self) -> TabState {
+        if self.join_handle.is_some() {
+            if self.state != TabState::Crashed && self.join_handle.as_ref().unwrap().is_finished(){
+                let join_handle = self.join_handle.take().unwrap();
+
+                self.state = match join_handle.join().unwrap() {
+                    Ok(..) => TabState::Finished,
+                    Err(err) => {
+                        self.crash_reason = Some(err);
+                        TabState::Crashed
+                    }
+                }
+            }
+        }
+
+        self.state
     }
 
     fn on_paint(&mut self, event: &crate::gui::app::PaintEvent) {
@@ -359,6 +413,29 @@ impl App {
 
             AppEvent::TabPainted { tab_id, total_content_height } => {
                 self.tabs.get_mut(&tab_id).unwrap().on_tab_painted(total_content_height);
+            }
+
+            AppEvent::TabCrashed { tab_id } => {
+                let tab = self.tabs.remove(&tab_id);
+                if !tab.is_some() {
+                    return;
+                }
+                let tab = tab.unwrap();
+
+                if let Some(current_tab) = self.current_visible_tab {
+                    if current_tab == tab_id {
+                        if let Some(first) = self.tabs.keys().next() {
+                            self.current_visible_tab = Some(*first);
+                        } else {
+                            self.current_visible_tab = None;
+                        }
+                    }
+                }
+
+                unsafe {
+                    let message = format!("ID: {}\r\nReason: {:?}", tab_id, tab.crash_reason);
+                    MessageBoxA(None, windows::core::PCSTR(message.as_ptr()), windows::core::PCSTR("Tab Crashed".as_ptr()), MB_ICONERROR | MB_OK);
+                }
             }
 
             AppEvent::PainterRequest => ()
@@ -507,8 +584,8 @@ impl crate::gui::app::GuiApp for App {
 
     /// This function is called in response to a `AppEvent::PainterRequest`.
     fn receive_painter(&mut self, painter: Arc<RefCell<dyn Painter>>) {
-        for tab in self.tabs.values() {
-            if tab.state == TabState::Loading {
+        for tab in self.tabs.values_mut() {
+            if tab.check_state() == TabState::Loading {
                 assert!(tab.finished_paint_receiver.try_recv().is_err());
                 tab.tab_event_sender.send(TabEvent::Layout { painter: painter.clone() }).unwrap();
                 tab.finished_paint_receiver.recv().unwrap();
