@@ -236,6 +236,8 @@ impl Color {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Brush {
+    Test,
+
     /// A brush with a solid color.
     SolidColor(Color),
 }

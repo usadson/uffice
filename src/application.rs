@@ -565,7 +565,10 @@ impl crate::gui::app::GuiApp for App {
         let window_size = event.window.inner_size().to_logical::<f32>(event.window.scale_factor()).into();
 
         assert!(event.painter.try_borrow_mut().is_ok(), "Failed to painter borrow as mutable; cannot paint App");
-        event.painter.as_ref().borrow_mut().paint_rect(Brush::SolidColor(APPLICATION_BACKGROUND_COLOR),
+        // event.painter.as_ref().borrow_mut().paint_rect(Brush::SolidColor(APPLICATION_BACKGROUND_COLOR),
+        //     Rect::from_position_and_size(Position::new(0.0, 0.0), window_size));
+
+        event.painter.as_ref().borrow_mut().paint_rect(Brush::Test,
             Rect::from_position_and_size(Position::new(0.0, 0.0), window_size));
 
         if let Some(current_tab_id) = self.current_visible_tab {

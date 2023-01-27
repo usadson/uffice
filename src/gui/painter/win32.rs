@@ -424,8 +424,31 @@ impl Win32Painter {
 
     /// Translate the library-agnostic gui::Brush into the Direct2D Brush of
     /// the mltg library.
-    fn translate_brush(&self, brush: &Brush) -> mltg::Brush {
+    fn translate_brush(&self, brush: &Brush, size: Size<f32>) -> mltg::Brush {
         match brush {
+            Brush::Test => {
+                let color_a = Color::from_rgb(198, 152, 255);
+                let color_b = Color::from_rgb(93, 203, 255);
+
+                let stops = self.factory.create_gradient_stop_collection(
+                    mltg::GradientMode::Wrap, // TODO check if correct
+                    &[
+                        mltg::GradientStop::new(0.0, color_a),
+                        mltg::GradientStop::new(0.1052, color_a),
+                        mltg::GradientStop::new(0.5365, color_b),
+                        mltg::GradientStop::new(1.0, color_b),
+                    ]
+                ).unwrap();
+
+                self.factory.create_radial_gradient_brush(
+                    mltg::Ellipse::new(
+                        mltg::Point::new(0.0405 * size.width, -0.04 * size.height),
+                        mltg::Vector::new(2.2131 * size.width, 2.446 * size.height)
+                    ),
+                    mltg::Point::new(0.0, 0.0),
+                    &stops
+                ).unwrap()
+            }
             Brush::SolidColor(color) => {
                 // TODO there should be an API for changing the color of a
                 // solid color brush in mltg, since Direct2D does support it.
@@ -473,7 +496,7 @@ impl super::Painter for Win32Painter {
             for command in &self.commands {
                 match command {
                     PaintCommand::Rect { brush, rect } => {
-                        target_cmd.fill(&Into::<mltg::Rect<f32>>::into(*rect), &self.translate_brush(brush));
+                        target_cmd.fill(&Into::<mltg::Rect<f32>>::into(*rect), &self.translate_brush(brush, rect.size()));
                     }
                     PaintCommand::Text { brush, position, layout, exact_size, } => {
                         let mut position = *position;
@@ -487,7 +510,7 @@ impl super::Painter for Win32Painter {
                             );
                         }
 
-                        target_cmd.fill(&layout.position(position), &self.translate_brush(brush));
+                        target_cmd.fill(&layout.position(position), &self.translate_brush(brush, Size::new(0.0, 0.0)));
 
                         if exact_size.is_some() {
                             target_cmd.reset_transform();
