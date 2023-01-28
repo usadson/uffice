@@ -1198,7 +1198,7 @@ dependencies = [
 [[package]]
 name = "mltg"
 version = "0.20.3"
-source = "git+https://github.com/usadson/mltg?branch=main#67bb725a9ffaf2a8473a6d0351f02d583a38a4d4"
+source = "git+https://github.com/usadson/mltg?branch=main#edb73644b3dec0e6034741ef6fe2c1c41ae0b837"
 dependencies = [
  "gecl",
  "raw-window-handle 0.5.0",

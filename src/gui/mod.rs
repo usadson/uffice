@@ -8,8 +8,9 @@ pub mod app;
 pub mod view;
 pub mod painter;
 pub mod scroll;
+pub mod widget;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Rect<T> {
     pub left: T,
     pub right: T,
@@ -100,6 +101,24 @@ mod tests {
 pub struct Size<T> {
     width: T,
     height: T,
+}
+
+impl From<Size<u32>> for Size<f32> {
+    fn from(value: Size<u32>) -> Self {
+        Self {
+            width: value.width as _,
+            height: value.height as _,
+        }
+    }
+}
+
+impl From<Size<f32>> for Size<u32> {
+    fn from(value: Size<f32>) -> Self {
+        Self {
+            width: value.width as _,
+            height: value.height as _,
+        }
+    }
 }
 
 impl<T> Size<T> where T: Copy {
@@ -202,6 +221,9 @@ impl Color {
 
     /// Blue, or in hex notation: #0000FF
     pub const BLUE: Color = Color::from_rgb(0, 0, 255);
+
+    /// A fully transparent color, or in hex notation: #00000000
+    pub const TRANSPARENT: Color = Color::from_rgba(0, 0, 0, 0);
 
     /// Creates a color from RGB color components, with full alpha opaqueness.
     pub const fn from_rgb(red: u8, green: u8, blue: u8) -> Self  {

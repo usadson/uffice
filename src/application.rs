@@ -35,6 +35,9 @@ use crate::gui::Rect;
 use crate::gui::painter::FontSpecification;
 use crate::gui::painter::FontWeight;
 use crate::gui::painter::PaintQuality;
+use crate::gui::widget::TabWidget;
+use crate::gui::widget::TabWidgetItem;
+use crate::gui::widget::Widget;
 use crate::gui::{
     AppEvent,
     Color,
@@ -335,6 +338,12 @@ impl Tab {
     }
 }
 
+impl TabWidgetItem for Tab {
+    fn title(&self) -> String {
+        self.path.file_name().unwrap().to_string_lossy().to_string()
+    }
+}
+
 impl SettingChangeSubscriber for Tab {
     fn setting_changed(&mut self, notification: &SettingChangeNotification) {
         self.scroller.setting_changed(notification);
@@ -353,6 +362,7 @@ pub struct App {
     next_tab_id: usize,
     current_visible_tab: Option<TabId>,
     tabs: HashMap<TabId, Tab>,
+    tab_widget: TabWidget<Tab>,
 
     keyboard: uffice_lib::Keyboard,
     user_settings: UserSettings,
@@ -367,6 +377,7 @@ impl App {
             next_tab_id: 1000,
             current_visible_tab: None,
             tabs: HashMap::new(),
+            tab_widget: TabWidget::new(),
 
             keyboard: uffice_lib::Keyboard::new(),
             user_settings: UserSettings::load(),
@@ -556,6 +567,12 @@ impl crate::gui::app::GuiApp for App {
                 window.request_redraw();
             }
 
+            Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
+                let size = size.to_logical(window.scale_factor());
+                let size = Size::new(size.width, size.height);
+                self.tab_widget.on_window_resize(size);
+            }
+
             Event::DeviceEvent { event: DeviceEvent::Key(keyboard), .. } => {
 
                 if let Some(key) = keyboard.virtual_keycode {
@@ -609,7 +626,9 @@ impl crate::gui::app::GuiApp for App {
             }
         }
 
-        self.paint_status_bar(event.painter.borrow_mut(), window_size);
+        let mut painter = event.painter.borrow_mut();
+        self.tab_widget.paint(&mut *painter, self.tabs.values());
+        self.paint_status_bar(painter, window_size);
     }
 
     /// This function is called in response to a `AppEvent::PainterRequest`.
