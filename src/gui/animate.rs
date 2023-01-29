@@ -157,13 +157,26 @@ impl InterpolatedValue {
     }
 
     pub fn change(&mut self, new_value: f32) {
-        self.start_value = self.get();
-        self.end_value = match new_value {
+        let new_value = match new_value {
             d if d < self.bounds.start => self.bounds.start,
             d if d > self.bounds.end => self.bounds.end,
             d => d,
         };
+
+        if self.end_value == new_value {
+            return;
+        }
+
+        self.start_value = self.get();
+        self.end_value = new_value;
         self.animator.reset();
+    }
+
+    /// Changes the value immediately, without animation.
+    pub fn change_immediately(&mut self, new_value: f32) {
+        self.start_value = new_value;
+        self.end_value = new_value;
+        self.animator.finished = true;
     }
 
     // Returns whether or not it has changed.

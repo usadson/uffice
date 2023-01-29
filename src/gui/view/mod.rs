@@ -5,7 +5,7 @@ use std::ops::{Deref, DerefMut};
 
 use sfml::{system::Vector2f, window::CursorType};
 
-use super::{Size, painter::Painter};
+use super::{painter::Painter, Rect};
 
 pub mod document_view;
 
@@ -63,21 +63,21 @@ pub enum Event<'a> {
 }
 
 pub struct PaintEvent<'a> {
+    pub content_rect: Rect<f32>,
     /// The opaqueness of the view, from 0.0 to 1.0 inclusive.
     pub opaqueness: f32,
     pub start_y: f32,
     pub painter: &'a mut dyn Painter,
-    pub window_size: Size<u32>,
     pub zoom: f32,
 }
 
 impl<'a> core::fmt::Debug for PaintEvent<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PaintEvent")
+            .field("content_rect", &self.content_rect)
             .field("opaqueness", &self.opaqueness)
             .field("start_y", &self.start_y)
             .field("painter", &String::from("<impl>"))
-            .field("window_size", &self.window_size)
             .field("zoom", &self.zoom)
             .finish()
     }

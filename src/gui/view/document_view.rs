@@ -130,7 +130,7 @@ impl DocumentView {
     /// and based on the layout tree a paint tree. That way we can just iterate
     /// the paint nodes and draw the document fast.
     fn paint(&mut self, event: &mut super::PaintEvent) {
-        let max_y = event.window_size.height as f32;
+        let max_y = event.content_rect.bottom;
 
         if let Some(document) = &self.document {
             let (first_page, last_page, page_settings) = {
@@ -147,12 +147,12 @@ impl DocumentView {
             let page_width = page_settings.size.width as f32 * event.zoom / 12.0;
             let page_height = page_settings.size.height as f32 * event.zoom / 12.0;
             let page_size = Size::new(page_width, page_height);
-            let start_x = (event.window_size.width as f32 - page_width) / 2.0;
+            let start_x = event.content_rect.left + (event.content_rect.width() as f32 - page_width) / 2.0;
 
             self.page_rects.clear();
             let start_y_pages = (first_page..(last_page + 1)).map(|index| {
                 let page_size_and_margin = (VERTICAL_PAGE_GAP + page_settings.size.height as f32 * TWELFTEENTH_POINT) * event.zoom;
-                let start_y = event.start_y + VERTICAL_PAGE_MARGIN * event.zoom + index as f32 * page_size_and_margin;
+                let start_y = event.content_rect.top + event.start_y + VERTICAL_PAGE_MARGIN * event.zoom + index as f32 * page_size_and_margin;
 
                 if start_y < max_y {
                     event.painter.paint_rect(crate::gui::Brush::SolidColor(crate::gui::Color::WHITE), crate::gui::Rect {

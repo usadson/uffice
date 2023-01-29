@@ -124,7 +124,7 @@ enum TabEvent {
     },
     Paint {
         painter: Arc<RefCell<dyn Painter>>,
-        window_size: Size<u32>,
+        content_rect: Rect<f32>,
 
         start_y: f32,
         zoom: f32,
@@ -217,7 +217,7 @@ impl Tab {
 
                         proxy.send_event(AppEvent::TabBecameReady(id)).unwrap();
                     }
-                    TabEvent::Paint{ painter, window_size, start_y, zoom } => {
+                    TabEvent::Paint{ painter, content_rect, start_y, zoom } => {
                         let mut content_height = 0.0;
 
                         // Scope this so the painter borrow is dropped before
@@ -225,10 +225,10 @@ impl Tab {
                         if let Some(view) = &mut view {
                             let painter = &mut *painter.as_ref().borrow_mut();
                             view.handle_event(&mut crate::gui::view::Event::Paint(crate::gui::view::PaintEvent {
+                                content_rect,
                                 opaqueness: 1.0,
                                 painter,
                                 start_y,
-                                window_size,
                                 zoom
                             }));
 
@@ -292,18 +292,17 @@ impl Tab {
         self.state
     }
 
-    fn on_paint(&mut self, event: &crate::gui::app::PaintEvent) {
+    fn on_paint(&mut self, event: &crate::gui::app::PaintEvent, content_rect: Rect<f32>) {
         if self.state == TabState::Loading {
             return;
         }
 
         assert!(event.painter.try_borrow_mut().is_ok(), "Failed to painter borrow as mutable; we can never send the PaintEvent to the tab!");
 
-        let size = event.window.inner_size().to_logical(event.window.scale_factor());
         let zoom_level = self.zoomer.zoom_factor();
         self.tab_event_sender.send(TabEvent::Paint {
             painter: event.painter.clone(),
-            window_size: Size::new(size.width, size.height),
+            content_rect,
             start_y: (VERTICAL_PAGE_MARGIN - self.scroller.content_height * self.scroller.position()) * zoom_level,
             zoom: zoom_level
         }).unwrap();
@@ -634,21 +633,29 @@ impl crate::gui::app::GuiApp for App {
         if let Some(current_tab_id) = self.current_visible_tab {
             let current_tab = self.tabs.get_mut(&current_tab_id).unwrap();
 
-            let has_animations = current_tab.has_running_animations();
-            let quality = if has_animations {
+            let has_animations_at_beginning_of_paint = current_tab.has_running_animations();
+            let quality = if has_animations_at_beginning_of_paint {
                 PaintQuality::AvoidResourceRescalingForDetail
             } else {
                 PaintQuality::Full
             };
             event.painter.as_ref().borrow_mut().switch_cache(PainterCache::Document(current_tab_id.0), quality);
-            current_tab.on_paint(&event);
+
+            let content_rect = Rect::from_position_and_size(
+                Position::new(0.0, self.tab_widget.rect().bottom),
+                Size::new(
+                    window_size.width() - current_tab.scroller.bar_rect.width(),
+                    window_size.height() - self.tab_widget.rect().height() - 15.0
+                )
+            );
+            current_tab.on_paint(&event, content_rect);
 
             let mut painter = event.painter.as_ref().borrow_mut();
             painter.switch_cache(PainterCache::UI, PaintQuality::Full);
 
-            current_tab.scroller.paint(event.window, &mut *painter);
+            current_tab.scroller.paint(&mut *painter, content_rect);
 
-            if has_animations {
+            if has_animations_at_beginning_of_paint || current_tab.has_running_animations() {
                 event.should_redraw_again = true;
                 self.previous_frame_had_running_animations = true;
             } else if self.previous_frame_had_running_animations {

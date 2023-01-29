@@ -1,8 +1,6 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use winit::window::Window;
-
 use crate::user_settings::{SettingChangeSubscriber, SettingChangeNotification, SettingName};
 
 use super::{
@@ -16,7 +14,7 @@ use super::{
     InteractionState
 };
 
-pub const SCROLL_BAR_WIDTH: f32 = 20.0;
+pub const SCROLL_BAR_WIDTH: f32 = 15.0;
 
 /// The color of the scroll bar below the scroll thumb.
 const SCROLL_BAR_BACKGROUND_COLOR: Color = Color::from_rgb(0xBD, 0xBD, 0xBD);
@@ -38,7 +36,11 @@ const LINE_SPEED: f32 = 100.0;
 pub struct Scroller {
     value: InterpolatedValue,
     pub content_height: f32,
-    window_height: f32,
+
+    /// TODO find better names for things that are currently called "content"
+    /// and "view".
+    view_height: f32,
+    thumb_height: InterpolatedValue,
 
     pub bar_rect: Rect<f32>,
     pub thumb_rect: Rect<f32>,
@@ -54,9 +56,11 @@ impl Scroller {
         Self {
             value: InterpolatedValue::new(0.0, 150.0, Self::EASING_FUNC, 0.0..1.0),
             content_height: 0.0,
-            window_height: 0.0,
 
-            bar_rect: Rect::empty(),
+            view_height: 0.0,
+            thumb_height: InterpolatedValue::new(0.0, 150.0, Self::EASING_FUNC, 0.0..f32::MAX),
+
+            bar_rect: Rect::from_position_and_size(Position::new(0.0, 0.0), Size::new(SCROLL_BAR_WIDTH, 0.0)),
             thumb_rect: Rect::empty(),
 
             interaction_state: InteractionState::Default,
@@ -71,36 +75,72 @@ impl Scroller {
 
     /// Draws the scroll bar track with the thumb.
     /// TODO: add thumb arrows.
-    pub fn paint(&mut self, window: &mut Window, painter: &mut dyn Painter) {
-        let window_size = window.inner_size().to_logical::<f32>(window.scale_factor());
-        self.window_height = window_size.height;
+    pub fn paint(&mut self, painter: &mut dyn Painter, inner_content_rect: Rect<f32>) {
+        self.view_height = inner_content_rect.height();
 
-        let full_page_scrolls = self.content_height / window_size.height as f32;
-        let scroll_bar_height = (window_size.height as f32 / full_page_scrolls).ceil();
-        let scroll_y = (window_size.height as f32 - scroll_bar_height) * self.value.get();
+        // Reflects into how many parts the content rect can be divided, with
+        // each part taking up the whole view rect.
+        let full_page_scrolls = self.content_height / self.view_height;
+        let mut thumb_height = (self.view_height / full_page_scrolls).ceil();
+        if thumb_height.is_infinite() {
+            thumb_height = self.view_height;
+        }
 
-        let bar_rect = super::Rect::from_position_and_size(
-            Position::new(window_size.width - SCROLL_BAR_WIDTH, 0.0),
-            Size::new(SCROLL_BAR_WIDTH, window_size.height)
+        let thumb_height = if self.thumb_height.get() == 0.0 {
+            self.thumb_height.change_immediately(thumb_height);
+            thumb_height
+        } else {
+            self.thumb_height.change(thumb_height);
+            self.thumb_height.get()
+        };
+
+        self.bar_rect = super::Rect::from_position_and_size(
+            Position::new(inner_content_rect.right, inner_content_rect.top),
+            Size::new(SCROLL_BAR_WIDTH, inner_content_rect.height())
         );
-        painter.paint_rect(Brush::SolidColor(SCROLL_BAR_BACKGROUND_COLOR), bar_rect);
 
+        let mut scroll_y = self.bar_rect.top + (self.view_height - thumb_height) * self.value.get();
+        if scroll_y.is_nan() {
+            scroll_y = 0.0;
+        }
+
+        self.thumb_rect = super::Rect::from_position_and_size(
+            Position::new(self.bar_rect.left, scroll_y),
+            Size::new(SCROLL_BAR_WIDTH, thumb_height)
+        );
+
+        self.paint_track(painter);
+        self.paint_thumb(painter);
+    }
+
+    /// The scroll thumb (or handle) is the part that can be dragged to scroll,
+    /// indicating where the user is in the content.
+    fn paint_thumb(&self, painter: &mut dyn Painter) {
         let thumb_color = match self.interaction_state {
             InteractionState::Default => SCROLL_BAR_THUMB_DEFAULT_COLOR,
             InteractionState::Hovered => SCROLL_BAR_THUMB_HOVER_COLOR,
             InteractionState::Pressed => SCROLL_BAR_THUMB_CLICK_COLOR,
         };
 
-        let thumb_rect = super::Rect::from_position_and_size(
-            Position::new(bar_rect.left, scroll_y),
-            Size::new(SCROLL_BAR_WIDTH, scroll_bar_height)
+        painter.paint_rect(Brush::SolidColor(thumb_color), self.thumb_rect);
+    }
+
+    /// The track contains the scroll thumb.
+    fn paint_track(&self, painter: &mut dyn Painter) {
+        painter.paint_rect(Brush::SolidColor(SCROLL_BAR_BACKGROUND_COLOR), self.bar_rect);
+
+        // Border
+        painter.paint_rect(Brush::SolidColor(Color::from_rgb(0x80, 0x80, 0x80)),
+            Rect::from_position_and_size(
+                Position::new(self.bar_rect.left - 1.0, self.bar_rect.top),
+                Size::new(1.0, self.bar_rect.height())
+            )
         );
-        painter.paint_rect(Brush::SolidColor(thumb_color), thumb_rect);
     }
 
     #[allow(dead_code)] // TODO
     pub fn apply_mouse_offset(&mut self, value: f32) {
-        let speed = self.window_height as f32 - self.thumb_rect.height();
+        let speed = self.view_height as f32 - self.thumb_rect.height();
         self.value.increase(value / speed);
     }
 
@@ -112,7 +152,7 @@ impl Scroller {
 impl super::animate::Animated for Scroller {
     fn has_running_animation(&self) -> bool {
         // TODO state changes like is_pressed and is_hovered
-        self.value.has_running_animation()
+        self.value.has_running_animation() || self.thumb_height.has_running_animation()
     }
 }
 

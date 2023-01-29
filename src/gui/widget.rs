@@ -9,6 +9,7 @@ const TAB_MAX_WIDTH: f32 = 220.0;
 const TAB_PADDING: f32 = 6.0;
 
 pub trait Widget {
+    fn rect(&self) -> Rect<f32>;
     fn on_window_resize(&mut self, window_size: Size<u32>);
 }
 
@@ -97,6 +98,10 @@ impl<'a, TabItem> TabWidget<TabItem>
 
 impl<'a, TabItem> Widget for TabWidget<TabItem>
         where TabItem: TabWidgetItem + 'a {
+    fn rect(&self) -> Rect<f32> {
+        self.bar_rect
+    }
+
     fn on_window_resize(&mut self, window_size: Size<u32>) {
         self.bar_rect = Rect::from_position_and_size(
             Position::new(0.0, 0.0),
