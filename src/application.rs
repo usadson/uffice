@@ -426,6 +426,16 @@ impl App {
         }
     }
 
+    /// Close the current visible tab.
+    fn close_current_tab(&mut self) {
+        let Some(tab_id) = self.current_visible_tab else {
+            return;
+        };
+
+        self.tabs.remove(&tab_id);
+        self.current_visible_tab = self.tabs.keys().next().copied();
+    }
+
     fn switch_to_tab(&mut self, tab_id: TabId, window: &mut winit::window::Window) {
         window.set_title(&format!("{} - {}", crate::gui::app::formatted_base_title(), self.tabs.get(&tab_id).unwrap().path.display()));
 
@@ -436,7 +446,12 @@ impl App {
     fn handle_user_event(&mut self, window: &mut winit::window::Window, event: AppEvent) {
         match event {
             AppEvent::TabBecameReady(tab_id) => {
-                self.tabs.get_mut(&tab_id).unwrap().on_became_ready();
+                let Some(tab) = self.tabs.get_mut(&tab_id) else {
+                    println!("[App] Warning: TabBecameReady: Tab not found/closed.");
+                    return;
+                };
+
+                tab.on_became_ready();
 
                 if Some(tab_id) == self.current_visible_tab {
                     window.request_redraw();
@@ -444,12 +459,16 @@ impl App {
             }
 
             AppEvent::TabPainted { tab_id, total_content_height } => {
-                self.tabs.get_mut(&tab_id).unwrap().on_tab_painted(total_content_height);
+                if let Some(tab) = self.tabs.get_mut(&tab_id) {
+                    tab.on_tab_painted(total_content_height);
+                } else {
+                    println!("[App] Warning: TabPainted: Tab not found/closed.");
+                }
             }
 
             AppEvent::TabCrashed { tab_id } => {
                 let tab = self.tabs.remove(&tab_id);
-                if !tab.is_some() {
+                if tab.is_none() {
                     return;
                 }
                 let tab = tab.unwrap();
@@ -478,6 +497,13 @@ impl App {
     pub fn on_key_pressed(&mut self, key: VirtualKeyCode, window: &mut Window) {
         println!("Key: {:?}", key);
         match key {
+            VirtualKeyCode::W => {
+                if self.keyboard.is_control_key_down() {
+                    self.close_current_tab();
+                    window.request_redraw();
+                }
+            }
+
             VirtualKeyCode::Minus => {
                 if self.keyboard.is_control_key_down() {
                     if let Some(current_tab_id) = self.current_visible_tab {
