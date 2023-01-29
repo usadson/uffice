@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use super::{painter::{Painter, FontSpecification}, Size, Position, Rect, Color, Brush};
 
 const TAB_MAX_WIDTH: f32 = 220.0;
-const TAB_PADDING: f32 = 2.0;
+const TAB_PADDING: f32 = 6.0;
 
 pub trait Widget {
     fn on_window_resize(&mut self, window_size: Size<u32>);
@@ -37,18 +37,35 @@ impl<'a, TabItem> TabWidget<TabItem>
         }
     }
 
-    pub fn paint<Iter>(&mut self, painter: &mut dyn Painter, items: Iter)
+    pub fn paint<Iter>(&mut self, painter: &mut dyn Painter, items: Iter, selected_nth: Option<usize>)
             where Iter: Iterator<Item = &'a TabItem> {
-        painter.paint_rect(Brush::SolidColor(Color::from_rgb(0x17, 0x17, 0x17)), self.bar_rect);
+        painter.paint_rect(Brush::SolidColor(Color::from_rgb(0x80, 0x80, 0x80)), self.bar_rect);
 
-        let tab_brush = Brush::SolidColor(Color::from_rgb(0x80, 0x80, 0x80));
+        let tab_brush_normal = Brush::SolidColor(Color::from_rgb(0x45, 0x45, 0x45));
+        let tab_brush_selected = Brush::SolidColor(Color::from_rgb(0x1F, 0x1F, 0x1F));
         let mut position = self.bar_rect.position();
         let size = Size::new(TAB_MAX_WIDTH, self.bar_rect.height() - TAB_PADDING * 2.0);
 
         let tab_font = FontSpecification::new("Segoe UI", 12.0, super::painter::FontWeight::SemiBold);
         painter.select_font(tab_font).unwrap();
 
+        let mut index = 0;
         for item in items {
+            let index = {
+                let result = index;
+                index += 1;
+                result
+            };
+
+            let is_selected = selected_nth == Some(index);
+            let tab_brush = {
+                if is_selected {
+                    tab_brush_selected
+                } else {
+                    tab_brush_normal
+                }
+            };
+
             let title = item.title();
             let title_text_size = painter.paint_text(Brush::SolidColor(Color::TRANSPARENT), position, &title, None);
 
@@ -72,7 +89,7 @@ impl<'a, TabItem> TabWidget<TabItem>
             painter.paint_text(Brush::SolidColor(Color::WHITE), rect.position(), &title, None);
             painter.end_clip_region();
 
-            position.x += size.width + TAB_PADDING * 2.0;
+            position.x += size.width + TAB_PADDING;
         }
     }
 
@@ -85,7 +102,7 @@ impl<'a, TabItem> Widget for TabWidget<TabItem>
             Position::new(0.0, 0.0),
             Size::new(
                 window_size.width as _,
-                25.0
+                33.0
             )
         );
     }

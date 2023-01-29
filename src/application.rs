@@ -549,6 +549,14 @@ impl App {
         })
     }
 
+    fn selected_tab_to_index(&self) -> Option<usize> {
+        let Some(tab_id) = self.current_visible_tab else {
+            return None
+        };
+
+        self.tabs.keys().position(|id| *id == tab_id)
+    }
+
     fn paint_status_bar(&self, mut painter: RefMut<dyn Painter>, window_size: Size<f32>) {
         let size = Size::new(window_size.width(), 15.0);
         let padding = 3.3;
@@ -650,7 +658,7 @@ impl crate::gui::app::GuiApp for App {
         }
 
         let mut painter = event.painter.borrow_mut();
-        self.tab_widget.paint(&mut *painter, self.tabs.values());
+        self.tab_widget.paint(&mut *painter, self.tabs.values(), self.selected_tab_to_index());
         self.paint_status_bar(painter, window_size);
     }
 
