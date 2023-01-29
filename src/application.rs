@@ -3,7 +3,7 @@
 
 use std::cell::RefCell;
 use std::cell::RefMut;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -98,7 +98,7 @@ enum TooltipState {
     NotApplicable,
 }
 
-#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct TabId(usize);
 
 impl Display for TabId {
@@ -361,7 +361,7 @@ pub struct App {
 
     next_tab_id: usize,
     current_visible_tab: Option<TabId>,
-    tabs: HashMap<TabId, Tab>,
+    tabs: BTreeMap<TabId, Tab>,
     tab_widget: TabWidget<Tab>,
 
     keyboard: uffice_lib::Keyboard,
@@ -376,7 +376,7 @@ impl App {
             event_loop_proxy,
             next_tab_id: 1000,
             current_visible_tab: None,
-            tabs: HashMap::new(),
+            tabs: Default::default(),
             tab_widget: TabWidget::new(),
 
             keyboard: uffice_lib::Keyboard::new(),
@@ -408,6 +408,23 @@ impl App {
         }
 
         tab_id
+    }
+
+    /// Check the digit key (1 - 9).
+    fn check_key_digit(&mut self, digit: u8, window: &mut winit::window::Window) {
+        if !self.keyboard.is_control_key_down() {
+            return;
+        }
+
+        if let Some(tab_id) = self.tabs.keys().nth((digit - 1) as _) {
+            // Is the tab already the current visible tab?
+            if Some(*tab_id) == self.current_visible_tab {
+                return;
+            }
+
+            self.current_visible_tab = Some(*tab_id);
+            window.request_redraw();
+        }
     }
 
     fn switch_to_tab(&mut self, tab_id: TabId, window: &mut winit::window::Window) {
@@ -482,9 +499,15 @@ impl App {
                 }
             }
 
-            VirtualKeyCode::Key0 => {
-                self.broadcast_setting_changed(SettingChangeOrigin::System, SettingName::EnableAnimations);
-            }
+            VirtualKeyCode::Key1 => self.check_key_digit(1, window),
+            VirtualKeyCode::Key2 => self.check_key_digit(2, window),
+            VirtualKeyCode::Key3 => self.check_key_digit(3, window),
+            VirtualKeyCode::Key4 => self.check_key_digit(4, window),
+            VirtualKeyCode::Key5 => self.check_key_digit(5, window),
+            VirtualKeyCode::Key6 => self.check_key_digit(6, window),
+            VirtualKeyCode::Key7 => self.check_key_digit(7, window),
+            VirtualKeyCode::Key8 => self.check_key_digit(8, window),
+            VirtualKeyCode::Key9 => self.check_key_digit(9, window),
 
             #[cfg(debug_assertions)]
             VirtualKeyCode::F9 => window.request_redraw(),
