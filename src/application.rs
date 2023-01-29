@@ -315,7 +315,7 @@ impl Tab {
     /// Returns whether or not to repaint.
     pub fn on_scroll(&mut self, delta: MouseScrollDelta, keyboard: &uffice_lib::Keyboard) -> bool {
         if let MouseScrollDelta::LineDelta(_left, top) = delta {
-            if keyboard.is_control_key_dow() {
+            if keyboard.is_control_key_down() {
                 if top > 0.2 {
                     return self.zoomer.increase_zoom_level();
                 }
@@ -463,7 +463,7 @@ impl App {
         println!("Key: {:?}", key);
         match key {
             VirtualKeyCode::Minus => {
-                if self.keyboard.is_control_key_dow() {
+                if self.keyboard.is_control_key_down() {
                     if let Some(current_tab_id) = self.current_visible_tab {
                         if self.tabs.get_mut(&current_tab_id).unwrap().zoomer.decrease_zoom_level() {
                             window.request_redraw();
@@ -473,7 +473,7 @@ impl App {
             }
 
             VirtualKeyCode::Equals => {
-                if self.keyboard.is_control_key_dow() {
+                if self.keyboard.is_control_key_down() {
                     if let Some(current_tab_id) = self.current_visible_tab {
                         if self.tabs.get_mut(&current_tab_id).unwrap().zoomer.increase_zoom_level() {
                             window.request_redraw();

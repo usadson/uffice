@@ -46,7 +46,7 @@ impl Keyboard {
     }
 
     /// Checks if either of the control keys are down.
-    pub fn is_control_key_dow(&self) -> bool {
+    pub fn is_control_key_down(&self) -> bool {
         self.is_down(VirtualKeyCode::LControl) || self.is_down(VirtualKeyCode::RControl)
     }
 
