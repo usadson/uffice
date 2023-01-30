@@ -57,11 +57,6 @@ fn draw_document(archive_path: &str, text_calculator: &mut dyn TextCalculator, p
     let mut archive = profile_expr!(profiler, "Read Archive", zip::ZipArchive::new(archive_file)
             .expect("Failed to read ZIP archive"));
 
-    for i in 0..archive.len() {
-        let file = archive.by_index(i).unwrap();
-        println!("[Document] ZIP: File: {}", file.name());
-    }
-
     let document_relationships;
     {
         let _frame = profiler.frame(String::from("Document Relationships"));

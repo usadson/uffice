@@ -36,10 +36,10 @@ fn print_formatted(duration: Duration) {
         return;
     }
 
-    let hours = seconds % 3600;
+    let hours = seconds / 3600;
     let minutes = (seconds % 3600) / 60;
     let seconds = seconds % 60;
-    println!("{}:{}:{}.{}", hours, minutes, seconds, duration.as_millis());
+    println!("{:02}:{:02}:{:02}.{}", hours, minutes, seconds, duration.as_millis());
 }
 
 impl Profiler {

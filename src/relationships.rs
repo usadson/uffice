@@ -15,6 +15,7 @@ pub enum RelationshipType {
 
     Comments,
     CommentsExtended,
+    CommentsExtensible,
     CommentsIds,
     CustomXml,
     Endnotes,
@@ -25,6 +26,7 @@ pub enum RelationshipType {
     Hyperlink,
     Image,
     Numbering,
+    People,
     Settings,
     Styles,
     Theme,
@@ -36,6 +38,7 @@ impl RelationshipType {
         match name {
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" => Some(Self::Comments),
             "http://schemas.microsoft.com/office/2011/relationships/commentsExtended" => Some(Self::CommentsExtended),
+            "http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible" => Some(Self::CommentsExtensible),
             "http://schemas.microsoft.com/office/2016/09/relationships/commentsIds" => Some(Self::CommentsIds),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml" => Some(Self::CustomXml),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes" => Some(Self::Endnotes),
@@ -46,13 +49,14 @@ impl RelationshipType {
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" => Some(Self::Hyperlink),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" => Some(Self::Image),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" => Some(Self::Numbering),
+            "http://schemas.microsoft.com/office/2011/relationships/people" => Some(Self::People),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" => Some(Self::Styles),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" => Some(Self::Settings),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" => Some(Self::Theme),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/webSettings" => Some(Self::WebSettings),
             _ => {
-                //assert!(false);
-                println!("UNKNWON TYPE: {}", name);
+                #[cfg(debug_assertions)]
+                println!("[Relationships] Unknown relationship type: {}", name);
                 Some(Self::Unknown)
             }
         }

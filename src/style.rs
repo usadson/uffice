@@ -48,6 +48,7 @@ impl Style {
         };
 
         for child in element.children() {
+            #[cfg(feature = "debug-styles")]
             println!("Style>> {}", child.tag_name().name());
 
             if child.tag_name().namespace().is_none() || child.tag_name().namespace().unwrap() != WORD_PROCESSING_XML_NAMESPACE {
@@ -77,6 +78,7 @@ impl Style {
                         &mut style.text_settings, &child);
                 }
                 _ => {
+                    #[cfg(feature = "debug-styles")]
                     println!("  Unknown");
                 }
             }
@@ -154,6 +156,7 @@ impl StyleManager {
                 "style" =>
                     match element.attribute((WORD_PROCESSING_XML_NAMESPACE, "styleId")) {
                         Some(id) => {
+                            #[cfg(feature = "debug-styles")]
                             println!("Style> {}", id);
                             let style = Style::from_xml(&mut manager, numbering_manager, &element)?;
                             manager.styles.insert(String::from(id), style);
