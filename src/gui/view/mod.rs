@@ -6,7 +6,7 @@ use std::ops::{
     DerefMut,
 };
 
-use sfml::window::CursorType;
+use winit::window::CursorIcon;
 
 use super::{
     painter::Painter,
@@ -66,7 +66,7 @@ pub trait ViewImpl {
 pub enum Event<'a> {
     Paint(PaintEvent<'a>),
 
-    MouseMoved(Position<f32>, &'a mut Option<CursorType>),
+    MouseMoved(Position<f32>, &'a mut Option<CursorIcon>),
 }
 
 pub struct PaintEvent<'a> {

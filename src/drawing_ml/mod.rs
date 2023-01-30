@@ -162,14 +162,14 @@ impl PictureFill {
 
 pub struct Blip {
     embedded: Option<Rc<RefCell<Relationship>>>,
-    image: Option<sfml::graphics::Image>,
+    // image: Option<sfml::graphics::Image>,
 }
 
 impl Blip {
     pub fn parse_xml(node: &xml::Node, relationships: &Relationships) -> Self {
         let mut blip = Blip {
             embedded: None,
-            image: None,
+            // image: None,
         };
 
         for attribute in node.attributes() {
@@ -180,7 +180,7 @@ impl Blip {
                     let rela = relationship.as_ref().borrow();
                     assert_eq!(rela.relation_type, crate::relationships::RelationshipType::Image);
 
-                    blip.image = Some(sfml::graphics::Image::from_memory(&rela.data).expect("Failed to load image"));
+                    // blip.image = Some(sfml::graphics::Image::from_memory(&rela.data).expect("Failed to load image"));
                     drop(rela);
 
                     blip.embedded = Some(relationship);
@@ -205,17 +205,17 @@ impl core::fmt::Debug for Blip {
             height: u32
         }
 
-        let image = match &self.image {
-            Some(image) => Some(Image {
-                width: image.size().x,
-                height: image.size().y,
-            }),
-            None => None,
-        };
+        // let image = match &self.image {
+        //     Some(image) => Some(Image {
+        //         width: image.size().x,
+        //         height: image.size().y,
+        //     }),
+        //     None => None,
+        // };
 
         f.debug_struct("Blip")
             .field("embedded", &self.embedded)
-            .field("image", &image)
+            // .field("image", &image)
             .finish()
     }
 }

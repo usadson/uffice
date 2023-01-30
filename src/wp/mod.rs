@@ -11,7 +11,7 @@ use std::{
     cell::RefCell,
 };
 
-use sfml::window::CursorType;
+use winit::window::CursorIcon;
 
 use crate::{
     text_settings::{
@@ -265,7 +265,7 @@ impl Document {
 
 pub struct MouseEvent {
     pub position: Position<f32>,
-    pub new_cursor: Option<CursorType>
+    pub new_cursor: Option<CursorIcon>
 }
 
 impl MouseEvent {
@@ -322,7 +322,7 @@ impl Hyperlink {
             }
 
             Event::Hover(mouse_event) => {
-                mouse_event.new_cursor = Some(CursorType::Hand);
+                mouse_event.new_cursor = Some(CursorIcon::Hand);
             }
         }
     }

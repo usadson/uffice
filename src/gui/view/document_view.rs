@@ -8,9 +8,8 @@ use std::{
 
 use roxmltree as xml;
 
-use sfml::window::CursorType;
-
 use uffice_lib::{profiling::Profiler, profile_expr};
+use winit::window::CursorIcon;
 
 use crate::{
     wp::{
@@ -210,7 +209,7 @@ impl DocumentView {
         }
     }
 
-    fn on_mouse_moved(&mut self, mouse_position: Position<f32>, new_cursor: &mut Option<CursorType>) {
+    fn on_mouse_moved(&mut self, mouse_position: Position<f32>, new_cursor: &mut Option<CursorIcon>) {
         let Some(document) = &mut self.document else {
             return;
         };

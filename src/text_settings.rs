@@ -4,7 +4,6 @@
 use std::{rc::Rc, cell::RefCell};
 
 use roxmltree as xml;
-use sfml::{graphics::TextStyle};
 
 use crate::{
     word_processing::TWELFTEENTH_POINT,
@@ -16,7 +15,7 @@ use crate::{
     gui::{
         painter::{
             FontWeight,
-            TextCalculator,
+            TextCalculator, FontStyle,
         },
         Rect,
         Size,
@@ -151,15 +150,15 @@ impl TextSettings {
         inherit_or_original(&other.indentation_left, &mut self.indentation_left);
     }
 
-    pub fn create_style(&self) -> TextStyle {
-        let mut style = TextStyle::REGULAR;
+    pub fn create_style(&self) -> FontStyle {
+        let mut style = FontStyle::NORMAL;
 
         if self.bold.unwrap_or(false) {
-            style |= TextStyle::BOLD;
+            style |= FontStyle::BOLD;
         }
 
         if self.underline.unwrap_or(false) {
-            style |= TextStyle::UNDERLINED;
+            style |= FontStyle::UNDERLINE;
         }
 
         style

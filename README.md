@@ -25,28 +25,6 @@ cd uffice
 cargo build
 ```
 
-You might also need to include the SFML binaries and related files in the `target/debug` directory. For Windows, you can [read more here](https://github.com/jeremyletang/rust-sfml/wiki/Windows#for-msvc-toolchains). In the future, build scripts or related systems might have to be put in place to improve the UX, see for example this [StackOverflow post](https://stackoverflow.com/questions/31630064/rust-sfml-linking-with-cc-failed-how-to-specify-lib-include-share-path).
-
-The following steps can be used on Windows:
-1. Go to the [SFML download page](https://www.sfml-dev.org/download.php).
-2. Download the latest release (at the moment this is [SFML 2.5.1](https://www.sfml-dev.org/files/SFML-2.5.1-windows-vc15-64-bit.zip)).
-3. Extract the ZIP archive containing the prebuilt binaries into a proper directory.
-4. Set the appropriate environment flags:
-   1. `SFML_INCLUDE_DIR`: this should point to the `include` directory in the extracted directory.
-   2. `SFML_LIBS_DIR`: this should point to the `lib` directory in the extracted directory.
-5. You can create a [`.cargo/config.toml`](https://doc.rust-lang.org/cargo/reference/config.html) file to simplify this, for example:
-```ini
-[env]
-SFML_INCLUDE_DIR = "C:/Users/user/Programs/SFML-2.5.1/include"
-SFML_LIBS_DIR = "C:/Users/user/Programs/SFML-2.5.1/lib"
-```
-6. This step allows the application to be built:
-```sh
-cargo build
-```
-7. At the moment, `cargo run` doesn't work yet, because the DLLs can't be found. To solve this, put the SFML dlls in the `target/debug` directory. These can be found in the `dir` directory in the directory with the extracted SFML files.
-8. Now the application can be started with `cargo run`!
-
 ## Usage
 After having built the binary, running the binary yields no useful results. The environment variable `UFFICE_TEST_FILE` can be used to specify a file to be loaded when the application boots up.
 

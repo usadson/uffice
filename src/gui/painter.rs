@@ -2,7 +2,7 @@
 // All Rights Reserved.
 
 use std::{cell::RefCell, rc::Rc};
-
+use bitflags::bitflags;
 use super::{Brush, Rect, Position, Size};
 
 #[cfg(windows)]
@@ -50,6 +50,16 @@ impl From<FontWeight> for f32 {
             FontWeight::ExtraBold => 800.0,
             FontWeight::Black => 900.0,
         }
+    }
+}
+
+bitflags! {
+    pub struct FontStyle: u32 {
+        const NORMAL = 0;
+        const BOLD = 1;
+        const ITALIC = 2;
+        const UNDERLINE = 4;
+        const STRIKEOUT = 8;
     }
 }
 
