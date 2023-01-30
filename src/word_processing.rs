@@ -188,7 +188,6 @@ fn process_body_element(context: &mut Context,
     let mut child_idx = 0;
 
     for child in node.children() {
-        // println!("├─ {}", child.tag_name().name());
         match child.tag_name().name() {
             "p" => position = process_paragraph_element(context, &parent, &child, position),
             "sdt" => position = process_structured_document_tag(context, &parent, &child, position),
@@ -196,7 +195,6 @@ fn process_body_element(context: &mut Context,
         }
 
         let progress = child_idx as f32 / child_count as f32;
-        println!("Progress: {} / {} = {}", child_idx, child_count, progress);
         (context.progress_sender)(progress);
         child_idx += 1;
     }
