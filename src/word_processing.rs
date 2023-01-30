@@ -44,6 +44,7 @@ struct Context<'a> {
     document: &'a xml::Document<'a>,
 
     text_calculator: &'a mut dyn gui::painter::TextCalculator,
+    progress_sender: &'a dyn Fn(f32),
 
     document_relationships: &'a Relationships,
     style_manager: &'a StyleManager,
@@ -102,7 +103,8 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
                         document_relationships: &Relationships,
                         numbering_manager: wp::numbering::NumberingManager,
                         document_properties: wp::document_properties::DocumentProperties,
-                        text_calculator: &mut dyn gui::painter::TextCalculator) -> DocumentResult {
+                        text_calculator: &mut dyn gui::painter::TextCalculator,
+                        progress_sender: &dyn Fn(f32)) -> DocumentResult {
     let text_settings = style_manager.default_text_settings();
     //text_settings.font = Some(String::from("Calibri"));
 
@@ -133,6 +135,7 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
     let mut context = Context{
         document,
         text_calculator,
+        progress_sender,
 
         document_relationships,
         style_manager,
@@ -181,6 +184,9 @@ fn process_body_element(context: &mut Context,
                         position: Position<f32>) -> Position<f32> {
     let mut position = position;
 
+    let child_count = node.children().count();
+    let mut child_idx = 0;
+
     for child in node.children() {
         // println!("├─ {}", child.tag_name().name());
         match child.tag_name().name() {
@@ -188,6 +194,11 @@ fn process_body_element(context: &mut Context,
             "sdt" => position = process_structured_document_tag(context, &parent, &child, position),
             _ => ()
         }
+
+        let progress = child_idx as f32 / child_count as f32;
+        println!("Progress: {} / {} = {}", child_idx, child_count, progress);
+        (context.progress_sender)(progress);
+        child_idx += 1;
     }
 
     position

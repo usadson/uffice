@@ -168,6 +168,9 @@ pub struct Tab {
 
     /// Sent when the event was finished.
     finished_paint_receiver: Receiver<TabFinishPaintInfo>,
+
+    /// How much of the document is loaded, between 0.0 and 1.0.
+    loading_progress: f32,
 }
 
 impl Tab {
@@ -213,7 +216,11 @@ impl Tab {
                         finished_paint_sender.send(TabFinishPaintInfo { content_height: 0.0 }).unwrap();
 
                         let mut text_calculator = text_calculator.as_ref().borrow_mut();
-                        view = Some(View::Document(crate::gui::view::document_view::DocumentView::new(&path_str, &mut *text_calculator)));
+                        view = Some(View::Document(crate::gui::view::document_view::DocumentView::new(&path_str, &mut *text_calculator,
+                            &|progress| {
+                                _ = proxy.send_event(AppEvent::TabProgressed { tab_id: id, progress });
+                            }
+                        )));
 
                         proxy.send_event(AppEvent::TabBecameReady(id)).unwrap();
                     }
@@ -263,6 +270,7 @@ impl Tab {
             zoomer: Zoomer::new(),
             tab_event_sender,
             finished_paint_receiver,
+            loading_progress: 0.0,
         }
     }
 
@@ -272,6 +280,10 @@ impl Tab {
 
     pub fn on_tab_painted(&mut self, total_content_height: f32) {
         self.scroller.content_height = total_content_height;
+    }
+
+    pub fn on_tab_progressed(&mut self, progress: f32) {
+        self.loading_progress = progress;
     }
 
     pub fn check_state(&mut self) -> TabState {
@@ -292,8 +304,27 @@ impl Tab {
         self.state
     }
 
+    /// Lets the user know that the tab is loading.
+    fn paint_loading_screen(&mut self, event: &crate::gui::app::PaintEvent, content_rect: Rect<f32>) {
+        let painter = &mut *event.painter.as_ref().borrow_mut();
+
+        let text = format!("Loading... {:.1}%", self.loading_progress * 100.0);
+
+        painter.select_font(FontSpecification::new("Segoe UI", 24.0, FontWeight::Regular))
+            .expect("Failed to load UI font");
+
+        let size = painter.paint_text(Brush::SolidColor(Color::TRANSPARENT), Position::new(0.0, 0.0), &text, None);
+        let position = Position::new(
+            content_rect.left() + (content_rect.width() - size.width()) / 2.0,
+            content_rect.top() + (content_rect.height() - size.height()) / 2.0,
+        );
+
+        painter.paint_text(Brush::SolidColor(Color::BLACK), position, &text, None);
+    }
+
     fn on_paint(&mut self, event: &crate::gui::app::PaintEvent, content_rect: Rect<f32>) {
         if self.state == TabState::Loading {
+            self.paint_loading_screen(event, content_rect);
             return;
         }
 
@@ -463,6 +494,15 @@ impl App {
                     tab.on_tab_painted(total_content_height);
                 } else {
                     println!("[App] Warning: TabPainted: Tab not found/closed.");
+                }
+            }
+
+            AppEvent::TabProgressed { tab_id, progress } => {
+                if let Some(tab) = self.tabs.get_mut(&tab_id) {
+                    tab.on_tab_progressed(progress);
+                    window.request_redraw();
+                } else {
+                    println!("[App] Warning: TabProgressed: Tab not found/closed.");
                 }
             }
 

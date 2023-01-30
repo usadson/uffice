@@ -327,6 +327,14 @@ pub enum AppEvent {
         total_content_height: f32,
     },
 
+    /// A certain tab has progressed in loading.
+    TabProgressed {
+        tab_id: TabId,
+
+        /// The progress of the tab, between 0 and 1.
+        progress: f32,
+    },
+
     TabCrashed {
         tab_id: TabId,
     },

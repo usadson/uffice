@@ -48,7 +48,7 @@ pub struct DocumentView {
     page_rects: Vec<Rect<f32>>,
 }
 
-fn draw_document(archive_path: &str, text_calculator: &mut dyn TextCalculator) -> DocumentResult {
+fn draw_document(archive_path: &str, text_calculator: &mut dyn TextCalculator, progress_sender: &dyn Fn(f32)) -> DocumentResult {
     let mut profiler = Profiler::new(String::from("Document Rendering"));
 
     let archive_file = profile_expr!(profiler, "Open Archive", std::fs::File::open(archive_path)
@@ -110,15 +110,15 @@ fn draw_document(archive_path: &str, text_calculator: &mut dyn TextCalculator) -
             .expect("Archive missing word/document.xml: this file is not a WordprocessingML document!");
     let document = xml::Document::parse(&document_text)
             .expect("Failed to parse document");
-    word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager, document_properties, text_calculator)
+    word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager, document_properties, text_calculator, progress_sender)
 }
 
 impl DocumentView {
-    pub fn new(archive_path: &str, text_calculator: &mut dyn TextCalculator) -> Self {
+    pub fn new(archive_path: &str, text_calculator: &mut dyn TextCalculator, progress_sender: &dyn Fn(f32)) -> Self {
         Self {
             view_data: ViewData {  },
             page_rects: Vec::new(),
-            document: Some(draw_document(archive_path, text_calculator)),
+            document: Some(draw_document(archive_path, text_calculator, progress_sender)),
         }
     }
 
