@@ -276,6 +276,10 @@ impl Zoomer {
     pub fn zoom_factor(&mut self) -> f32 {
         self.zoom_level.get()
     }
+
+    pub fn zoom_factor_unanimated(&self) -> f32 {
+        ZOOM_LEVELS[self.zoom_index]
+    }
 }
 
 impl Animated for Zoomer {

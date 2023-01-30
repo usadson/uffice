@@ -622,6 +622,14 @@ impl App {
     }
 
     fn paint_status_bar(&self, mut painter: RefMut<dyn Painter>, window_size: Size<f32>) {
+        let Some(tab_id) = self.current_visible_tab else {
+            return;
+        };
+
+        let Some(tab) = self.tabs.get(&tab_id) else {
+            return
+        };
+
         let size = Size::new(window_size.width(), 15.0);
         let padding = 3.3;
 
@@ -629,8 +637,11 @@ impl App {
         painter.paint_rect(Brush::SolidColor(Color::from_rgb(0x22, 0x22, 0x22)),
                 Rect::from_position_and_size(position, size));
 
+        let text = format!("1238 words,  {}% zoom", tab.zoomer.zoom_factor_unanimated() * 100.0);
+
         painter.select_font(FontSpecification::new("Segoe UI", 8.0, FontWeight::Regular)).unwrap();
-        painter.paint_text(Brush::SolidColor(Color::from_rgb(0xCC, 0xCC, 0xCC)), Position::new(padding, position.y()), "1238 words", None);
+        painter.paint_text(Brush::SolidColor(Color::from_rgb(0xCC, 0xCC, 0xCC)), Position::new(padding, position.y()), &text, None);
+
         drop(painter);
     }
 }
