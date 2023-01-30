@@ -495,7 +495,6 @@ impl App {
 
     /// Called when the specified key is pressed (for the first time, not held).
     pub fn on_key_pressed(&mut self, key: VirtualKeyCode, window: &mut Window) {
-        println!("Key: {:?}", key);
         match key {
             VirtualKeyCode::W => {
                 if self.keyboard.is_control_key_down() {
