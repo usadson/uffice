@@ -7,20 +7,30 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use std::{cell::RefCell, rc::Rc};
 
-use sfml::system::Vector2f;
-
 use crate::{
     *,
     text_settings::{
         PageSettings,
-        Size, TextJustification, Numbering
+        Numbering,
+        TextJustification,
     },
     error::Error,
+    gui::{
+        Position,
+        Rect,
+        Size,
+    },
     relationships::Relationships,
     wp::{
-        Document, Node, numbering, layout::LineLayout
+        Document,
+        layout::LineLayout,
+        Node,
+        numbering,
     },
-    gui::painter::{TextCalculator, FontSpecification},
+    gui::painter::{
+        TextCalculator,
+        FontSpecification,
+    },
     style::StyleManager,
 };
 
@@ -39,9 +49,6 @@ struct Context<'a> {
     style_manager: &'a StyleManager,
     page_settings: PageSettings,
 
-    #[allow(dead_code)]
-    render_size: Vector2f,
-
     numbering_manager: wp::numbering::NumberingManager,
 }
 
@@ -53,7 +60,7 @@ fn load_page_settings(document: &xml::Document) -> Result<PageSettings, Error> {
         }
 
         let mut page_size = Size::new(10, 10);
-        let mut margins = text_settings::Rect::empty();
+        let mut margins = Rect::<u32>::empty();
 
         let mut offset_header = 0;
         let mut offset_footer = 0;
@@ -101,7 +108,7 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
 
     let page_settings = load_page_settings(document).unwrap();
 
-    let mut position = Vector2f::new(
+    let mut position = Position::new(
         page_settings.margins.left as f32 * TWELFTEENTH_POINT,
         page_settings.margins.top as f32 * TWELFTEENTH_POINT
     );
@@ -112,11 +119,6 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
     //    page_settings.size.width as f32 / 12f32,
     //    page_settings.size.height as f32 / 12f32
     //);
-
-    let render_size = Vector2f::new(
-        page_settings.size.width as f32 * TWELFTEENTH_POINT,
-        page_settings.size.height as f32 * TWELFTEENTH_POINT
-    );
 
     let doc = Rc::new(
         RefCell::new(
@@ -136,8 +138,6 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
         style_manager,
         page_settings,
 
-        render_size,
-
         numbering_manager,
     };
 
@@ -153,7 +153,7 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
 }
 
 fn process_drawing_element(context: &mut Context, parent: &Rc<RefCell<Node>>,
-                           node: &xml::Node, position: Vector2f) -> Vector2f {
+                           node: &xml::Node, position: Position<f32>) -> Position<f32> {
     for child in node.children() {
         match child.tag_name().name() {
             "inline" => {
@@ -178,7 +178,7 @@ fn process_drawing_element(context: &mut Context, parent: &Rc<RefCell<Node>>,
 fn process_body_element(context: &mut Context,
                         parent: &Rc<RefCell<Node>>,
                         node: &xml::Node,
-                        position: Vector2f) -> Vector2f {
+                        position: Position<f32>) -> Position<f32> {
     let mut position = position;
 
     for child in node.children() {
@@ -217,7 +217,7 @@ fn process_hyperlink_element(context: &mut Context,
                              parent: &Rc<RefCell<Node>>,
                              line_layout: &mut wp::layout::LineLayout,
                              node: &xml::Node,
-                             mut position: Vector2f) -> Vector2f {
+                             mut position: Position<f32>) -> Position<f32> {
     let hyperlink_ref = wp::append_child(parent, wp::Node::new(wp::NodeData::Hyperlink(Default::default())));
 
     for child in node.children() {
@@ -247,11 +247,11 @@ fn process_hyperlink_element(context: &mut Context,
 fn process_paragraph_element(context: &mut Context,
                              parent: &Rc<RefCell<Node>>,
                              node: &xml::Node,
-                             original_position: Vector2f) -> Vector2f {
+                             original_position: Position<f32>) -> Position<f32> {
     let paragraph = wp::append_child(&parent, wp::Node::new(wp::NodeData::Paragraph(wp::Paragraph)));
 
     //position.x = context.page_settings.margins.left as f32 * TWELFTEENTH_POINT;
-    let mut line_layout = wp::layout::LineLayout::new(&context.page_settings, original_position.y);
+    let mut line_layout = wp::layout::LineLayout::new(&context.page_settings, original_position.y());
 
     paragraph.borrow_mut().position = line_layout.position_on_line;
     let mut position = line_layout.position_on_line;
@@ -272,7 +272,7 @@ fn process_paragraph_element(context: &mut Context,
         if let Some(numbering) = pref.text_settings.numbering.clone() {
             drop(pref);
             let node = numbering.create_node(&paragraph, &mut line_layout, context.text_calculator);
-            position.x += node.as_ref().borrow().size.width();
+            *position.x_mut() += node.as_ref().borrow().size.width();
             // println!("Numbering Width: {}", node.as_ref().borrow().size.x);
 
 
@@ -281,9 +281,9 @@ fn process_paragraph_element(context: &mut Context,
 
             let text_settings = &paragraph.as_ref().borrow().text_settings;
             if text_settings.indentation_left.is_some() {
-                position.x = text_settings.indent_one(position.x, true);
+                *position.x_mut() = text_settings.indent_one(position.x(), true);
             } else {
-                position.x = (position.x / NUMBERING_INDENTATION + 1.0).floor() * NUMBERING_INDENTATION;
+                *position.x_mut() = (position.x() / NUMBERING_INDENTATION + 1.0).floor() * NUMBERING_INDENTATION;
             }
         }
     }
@@ -344,10 +344,10 @@ fn process_paragraph_element(context: &mut Context,
     assert!(paragraph_spacing >= 0.0);
 
     // println!("│  ├─ Advancing {}  +  {}", line_spacing, paragraph_spacing);
-    position.y += line_spacing + paragraph_spacing;
+    *position.y_mut() += line_spacing + paragraph_spacing;
 
     let diff = position - original_position;
-    paragraph.size = gui::Size::new(diff.x, diff.y);
+    paragraph.size = diff.into();
 
     position
 }
@@ -489,7 +489,7 @@ fn process_sdt_end_character_properties(_context: &mut Context, _parent: &Rc<Ref
 }
 
 /// Process the <w:sdtContent> element
-fn process_sdt_content(context: &mut Context, parent: &Rc<RefCell<Node>>, node: &xml::Node, original_position: Vector2f) -> Vector2f {
+fn process_sdt_content(context: &mut Context, parent: &Rc<RefCell<Node>>, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
     let mut position = original_position;
 
     for child in node.children() {
@@ -508,7 +508,7 @@ fn process_sdt_content(context: &mut Context, parent: &Rc<RefCell<Node>>, node: 
 fn process_structured_document_tag(context: &mut Context,
                                    parent: &Rc<RefCell<Node>>,
                                    node: &xml::Node,
-                                   original_position: Vector2f) -> Vector2f {
+                                   original_position: Position<f32>) -> Position<f32> {
     let mut position = original_position;
 
     let sdt = wp::append_child(&parent, wp::Node::new(wp::NodeData::StructuredDocumentTag(Default::default())));
@@ -532,7 +532,7 @@ fn process_text_element(context: &mut Context,
                         parent: &Rc<RefCell<Node>>,
                         line_layout: &mut wp::layout::LineLayout,
                         node: &xml::Node,
-                        position: Vector2f) -> Vector2f {
+                        position: Position<f32>) -> Position<f32> {
     let mut position = position;
 
     let instruction = (|| {
@@ -572,16 +572,16 @@ fn process_text_element(context: &mut Context,
 
 fn process_text_element_in_instructed_field(context: &mut Context,
         parent: &Rc<RefCell<Node>>, line_layout: &mut LineLayout,
-        _position: Vector2f, field: &wp::instructions::Field) -> Vector2f {
+        _position: Position<f32>, field: &wp::instructions::Field) -> Position<f32> {
     append_text_element(&field.resolve_to_string(&parent), &parent, line_layout, context.text_calculator)
 }
 
-pub fn append_text_element(text_string: &str, parent: &Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator) -> Vector2f {
+pub fn append_text_element(text_string: &str, parent: &Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator) -> Position<f32> {
     let position = parent.as_ref().borrow().position;
     process_text_element_text(parent, line_layout, text_calculator, text_string, position)
 }
 
-pub fn process_text_element_text(parent: &Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator, text_string: &str, original_position: Vector2f) -> Vector2f {
+pub fn process_text_element_text(parent: &Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator, text_string: &str, original_position: Position<f32>) -> Position<f32> {
     #[derive(Debug)]
     enum LineStopReason {
         /// The end of the text was reached. This could also very well mean the
@@ -628,22 +628,22 @@ pub fn process_text_element_text(parent: &Rc<RefCell<Node>>, line_layout: &mut w
         let text_size = text_calculator.calculate_text_size(font_spec, line).unwrap();
         let mut width = text_size.width();
 
-        let max_width_fitting_on_page = line_layout.page_horizontal_end - position.x;
+        let max_width_fitting_on_page = line_layout.page_horizontal_end - position.x();
 
         #[cfg(feature = "debug-text-layout")]
-        println!("path \"{}\" x={} w={} max_on_page={} previous_stop={:?}", line, position.x, width, max_width_fitting_on_page, previous_stop_reason);
+        println!("path \"{}\" x={} w={} max_on_page={} previous_stop={:?}", line, position.x(), width, max_width_fitting_on_page, previous_stop_reason);
 
         if max_width_fitting_on_page < 0.0 || previous_stop_reason.is_some() {
-            position.y += text_size.height() + line_spacing * LINE_SPACING;
+            *position.y_mut() += text_size.height() + line_spacing * LINE_SPACING;
 
-            if position.y > line_layout.page_vertical_end {
+            if position.y() > line_layout.page_vertical_end {
                 page_number += 1;
                 parent.borrow_mut().set_last_page_number(page_number);
-                position.y = line_layout.page_vertical_start;
+                *position.y_mut() = line_layout.page_vertical_start;
                 line_layout.reset();
             }
 
-            position.x = line_layout.page_horizontal_start;
+            *position.x_mut() = line_layout.page_horizontal_start;
 
             if iter.peek().is_some() {
                 previous_stop_reason = None;
@@ -701,17 +701,17 @@ pub fn process_text_element_text(parent: &Rc<RefCell<Node>>, line_layout: &mut w
 
         text_part.position = match text_part.text_settings.justify.unwrap_or(TextJustification::Start) {
             TextJustification::Start => position,
-            TextJustification::Center => Vector2f::new(
+            TextJustification::Center => Position::new(
                 line_layout.page_horizontal_start + (line_layout.page_horizontal_end - line_layout.page_horizontal_start - width) / 2.0,
-                    position.y
+                position.y()
             ),
-            TextJustification::End => Vector2f::new(line_layout.page_horizontal_end - width, position.y)
+            TextJustification::End => Position::new(line_layout.page_horizontal_end - width, position.y())
         };
 
         line_layout.add_line_height_candidate(text_part.size.height());
-        line_layout.position_on_line.x += width;
+        *line_layout.position_on_line.x_mut() += width;
 
-        position.x += width;
+        *position.x_mut() += width;
 
         previous_stop_reason = Some(stop_reason);
     }
@@ -727,7 +727,7 @@ fn process_text_run_element(context: &mut Context,
                             parent: &Rc<RefCell<Node>>,
                             line_layout: &mut wp::layout::LineLayout,
                             node: &xml::Node,
-                            position: Vector2f) -> Vector2f {
+                            position: Position<f32>) -> Position<f32> {
     let mut position = position;
 
     let text_run = wp::append_child(parent, wp::Node::new(wp::NodeData::TextRun(Default::default())));

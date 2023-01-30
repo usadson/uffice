@@ -5,9 +5,9 @@ use crate::application::TabId;
 
 pub mod animate;
 pub mod app;
-pub mod view;
 pub mod painter;
 pub mod scroll;
+pub mod view;
 pub mod widget;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -18,7 +18,7 @@ pub struct Rect<T> {
     pub bottom: T,
 }
 
-impl<T> Rect<T> where T: Copy + std::ops::Add<Output = T> + std::ops::Sub<Output = T> {
+impl<T> Rect<T> where T: Copy + std::ops::Add<Output = T> + std::ops::Sub<Output = T> + std::cmp::PartialOrd {
     pub fn from_positions(left: T, right: T, top: T, bottom: T) -> Self {
         Self { left, right, top, bottom }
     }
@@ -65,12 +65,24 @@ impl<T> Rect<T> where T: Copy + std::ops::Add<Output = T> + std::ops::Sub<Output
     pub fn height(&self) -> T {
         self.bottom - self.top
     }
+
+    pub fn is_inside_inclusive(&self, position: Position<T>) -> bool {
+        position.x() >= self.left && position.x() <= self.right
+            && position.y() >= self.top && position.y() <= self.bottom
+    }
+}
+
+impl Rect<u32> {
+    /// Creates a Rect with no size.
+    pub fn empty() -> Rect<u32> {
+        Self::from_position_and_size(Position::new(0, 0), Size::<u32>::empty())
+    }
 }
 
 impl Rect<f32> {
     /// Creates a Rect with no size.
     pub fn empty() -> Rect<f32> {
-        Self::from_position_and_size(Position::new(0.0, 0.0), Size::empty())
+        Self::from_position_and_size(Position::new(0.0, 0.0), Size::<f32>::empty())
     }
 }
 
@@ -80,18 +92,18 @@ mod tests {
 
     #[test]
     fn empty_test() {
-        assert_eq!(Rect::empty(), Rect::from_position_and_size(Position::new(0.0, 0.0), Size::new(0.0, 0.0)));
+        assert_eq!(Rect::<f32>::empty(), Rect::from_position_and_size(Position::new(0.0, 0.0), Size::new(0.0, 0.0)));
 
-        assert_eq!(Rect::empty().bottom, 0.0);
-        assert_eq!(Rect::empty().top, 0.0);
-        assert_eq!(Rect::empty().right, 0.0);
-        assert_eq!(Rect::empty().left, 0.0);
+        assert_eq!(Rect::<f32>::empty().bottom, 0.0);
+        assert_eq!(Rect::<f32>::empty().top, 0.0);
+        assert_eq!(Rect::<f32>::empty().right, 0.0);
+        assert_eq!(Rect::<f32>::empty().left, 0.0);
 
-        assert_eq!(Rect::empty().width(), 0.0);
-        assert_eq!(Rect::empty().height(), 0.0);
+        assert_eq!(Rect::<f32>::empty().width(), 0.0);
+        assert_eq!(Rect::<f32>::empty().height(), 0.0);
 
-        assert_eq!(Rect::empty().position(), Position::new(0.0, 0.0));
-        assert_eq!(Rect::empty().size(), Size::empty());
+        assert_eq!(Rect::<f32>::empty().position(), Position::new(0.0, 0.0));
+        assert_eq!(Rect::<f32>::empty().size(), Size::<f32>::empty());
     }
 }
 
@@ -101,6 +113,15 @@ mod tests {
 pub struct Size<T> {
     width: T,
     height: T,
+}
+
+impl From<Position<f32>> for Size<f32> {
+    fn from(value: Position<f32>) -> Self {
+        Self {
+            width: value.x(),
+            height: value.y(),
+        }
+    }
 }
 
 impl From<Size<u32>> for Size<f32> {
@@ -142,6 +163,13 @@ impl Size<f32> {
     }
 }
 
+impl Size<u32> {
+    /// Creates a size with no width or height.
+    pub fn empty() -> Size<u32> {
+        Self { width: 0, height: 0 }
+    }
+}
+
 impl std::ops::Mul<f32> for Size<f32> {
     type Output = Self;
     fn mul(self, rhs: f32) -> Self::Output {
@@ -171,12 +199,24 @@ impl<T> Position<T> where T: Copy {
         Self { x, y }
     }
 
+    /// Get the x value.
     pub fn x(&self) -> T {
         self.x
     }
 
+    /// Get the y value.
     pub fn y(&self) -> T {
         self.y
+    }
+
+    /// Get a mutable reference to the x value.
+    pub fn x_mut(&mut self) -> &mut T {
+        &mut self.x
+    }
+
+    /// Get a mutable reference to the y value.
+    pub fn y_mut(&mut self) -> &mut T {
+        &mut self.y
     }
 }
 
@@ -193,6 +233,14 @@ impl<T: std::ops::Add<T, Output = T> + Copy> std::ops::Add<Position<T>> for Posi
 
     fn add(self, rhs: Position<T>) -> Self::Output {
         Position::new(self.x + rhs.x, self.y + rhs.y)
+    }
+}
+
+impl<T: std::ops::Sub<T, Output = T> + Copy> std::ops::Sub<Position<T>> for Position<T> {
+    type Output = Position<T>;
+
+    fn sub(self, rhs: Position<T>) -> Self::Output {
+        Position::new(self.x - rhs.x, self.y - rhs.y)
     }
 }
 

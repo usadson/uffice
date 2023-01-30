@@ -4,95 +4,35 @@
 use std::{rc::Rc, cell::RefCell};
 
 use roxmltree as xml;
-use sfml::{graphics::{TextStyle}, system::Vector2f};
+use sfml::{graphics::TextStyle};
 
 use crate::{
-    word_processing::{
-        TWELFTEENTH_POINT
-    },
+    word_processing::TWELFTEENTH_POINT,
     color_parser,
     WORD_PROCESSING_XML_NAMESPACE,
     style::StyleManager,
     wp::layout::LineLayout,
     gui::Color,
-    gui::painter::{FontWeight, TextCalculator}
+    gui::{
+        painter::{
+            FontWeight,
+            TextCalculator,
+        },
+        Rect,
+        Size,
+    },
 };
 
 #[derive(Clone, Copy, Debug)]
-pub struct Size {
-    pub width: u32,
-    pub height: u32,
-}
-
-impl Size {
-    pub fn new(width: u32, height: u32) -> Self {
-        Self { width, height }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct Position {
-    pub x: u32,
-    pub y: u32,
-}
-
-impl Position {
-    pub fn new(x: u32, y: u32) -> Self {
-        Self { x, y }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct Rect {
-    pub left: u32,
-    pub right: u32,
-    pub top: u32,
-    pub bottom: u32,
-}
-
-impl Rect {
-    pub fn new(position: Vector2f, size: Vector2f) -> Self {
-        Self {
-            left: position.x as u32,
-            right: (position.x + size.x) as u32,
-
-            top: position.y as u32,
-            bottom: (position.y + size.y) as u32,
-        }
-    }
-
-    pub fn empty() -> Self {
-        Rect { left: 0, right: 0, top: 0, bottom: 0 }
-    }
-
-    pub fn is_inside_inclusive(&self, position: Position) -> bool {
-        position.x >= self.left && position.x <= self.right
-            && position.y >= self.top && position.y <= self.bottom
-    }
-}
-
-impl From<sfml::graphics::Rect<f32>> for Rect {
-    fn from(some: sfml::graphics::Rect<f32>) -> Self {
-        Self{
-            left: some.left as u32,
-            right: (some.left + some.width) as u32,
-
-            top: some.top as u32,
-            bottom: (some.top + some.height) as u32,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
 pub struct PageSettings {
-    pub size: Size,
-    pub margins: Rect,
+    pub size: Size<u32>,
+    pub margins: Rect<u32>,
     pub offset_header: u32,
     pub offset_footer: u32,
 }
 
 impl PageSettings {
-    pub fn new(size: Size, margins: Rect, offset_header: u32, offset_footer: u32) -> Self {
+    pub fn new(size: Size<u32>, margins: Rect<u32>, offset_header: u32, offset_footer: u32) -> Self {
         Self { size, margins, offset_header, offset_footer }
     }
 }

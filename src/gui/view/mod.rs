@@ -1,11 +1,18 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::ops::{Deref, DerefMut};
+use std::ops::{
+    Deref,
+    DerefMut,
+};
 
-use sfml::{system::Vector2f, window::CursorType};
+use sfml::window::CursorType;
 
-use super::{painter::Painter, Rect};
+use super::{
+    painter::Painter,
+    Position,
+    Rect,
+};
 
 pub mod document_view;
 
@@ -46,8 +53,8 @@ pub trait ViewImpl {
     /// scroll.
     fn calculate_content_height(&self) -> f32;
 
-    fn check_interactable_for_mouse(&self, mouse_position: sfml::system::Vector2<f32>,
-        callback: &mut dyn FnMut(&mut crate::wp::Node, crate::text_settings::Position)) -> bool;
+    fn check_interactable_for_mouse(&self, mouse_position: Position<f32>,
+        callback: &mut dyn FnMut(&mut crate::wp::Node, Position<f32>)) -> bool;
 
     /// Print the document tree to stdout.
     fn dump_dom_tree(&self);
@@ -59,7 +66,7 @@ pub trait ViewImpl {
 pub enum Event<'a> {
     Paint(PaintEvent<'a>),
 
-    MouseMoved(Vector2f, &'a mut Option<CursorType>),
+    MouseMoved(Position<f32>, &'a mut Option<CursorType>),
 }
 
 pub struct PaintEvent<'a> {

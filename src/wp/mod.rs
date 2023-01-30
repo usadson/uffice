@@ -11,14 +11,19 @@ use std::{
     cell::RefCell,
 };
 
-use sfml::{system::Vector2f, window::CursorType};
+use sfml::window::CursorType;
 
 use crate::{
     text_settings::{
         TextSettings,
-        PageSettings, Position, Rect
+        PageSettings,
     },
-    relationships::Relationship, gui::Size
+    gui::{
+        Position,
+        Size,
+        Rect,
+    },
+    relationships::Relationship,
 };
 
 #[derive(Debug, strum_macros::IntoStaticStr)]
@@ -87,7 +92,7 @@ pub struct Node {
     pub page_last: usize,
 
     /// The position this node is starting from.
-    pub position: Vector2f,
+    pub position: Position<f32>,
 
     pub text_settings: TextSettings,
 
@@ -106,7 +111,7 @@ impl Node {
             data,
             page_first: 0,
             page_last: 0,
-            position: Default::default(),
+            position: Position::new(0.0, 0.0),
             text_settings: TextSettings::new(),
             size: Default::default(),
             interaction_states: Default::default(),
@@ -169,7 +174,7 @@ impl Node {
     /// Returns the hit test result.
     ///
     /// If Some, the vector contains the innermost to outermost nodes that were in the hit path.
-    pub fn hit_test(&mut self, position: Position, callback: &mut dyn FnMut(&mut Node)) -> bool {
+    pub fn hit_test(&mut self, position: Position<f32>, callback: &mut dyn FnMut(&mut Node)) -> bool {
         if let Some(children) = &mut self.children {
             for child in children {
                 if child.borrow_mut().hit_test(position, callback) {
@@ -181,7 +186,7 @@ impl Node {
 
         match self.data {
             NodeData::TextPart(..) => {
-                let rect = Rect::new(self.position, Vector2f::new(self.size.width(), self.size.height()));
+                let rect = Rect::from_position_and_size(self.position, Size::new(self.size.width(), self.size.height()));
                 if rect.is_inside_inclusive(position) {
                     callback(self);
                     return true;
@@ -259,12 +264,12 @@ impl Document {
 }
 
 pub struct MouseEvent {
-    pub position: Position,
+    pub position: Position<f32>,
     pub new_cursor: Option<CursorType>
 }
 
 impl MouseEvent {
-    pub fn new(position: Position) -> MouseEvent {
+    pub fn new(position: Position<f32>) -> MouseEvent {
         Self {
             position,
             new_cursor: None

@@ -8,10 +8,7 @@ use std::{
 
 use roxmltree as xml;
 
-use sfml::{
-    system::Vector2f,
-    window::CursorType,
-};
+use sfml::window::CursorType;
 
 use uffice_lib::{profiling::Profiler, profile_expr};
 
@@ -213,7 +210,7 @@ impl DocumentView {
         }
     }
 
-    fn on_mouse_moved(&mut self, mouse_position: Vector2f, new_cursor: &mut Option<CursorType>) {
+    fn on_mouse_moved(&mut self, mouse_position: Position<f32>, new_cursor: &mut Option<CursorType>) {
         let Some(document) = &mut self.document else {
             return;
         };
@@ -247,13 +244,13 @@ impl super::ViewImpl for DocumentView {
         }
     }
 
-    fn check_interactable_for_mouse(&self, mouse_position: Vector2f, callback: &mut dyn FnMut(&mut crate::wp::Node, crate::text_settings::Position)) -> bool {
+    fn check_interactable_for_mouse(&self, mouse_position: Position<f32>, callback: &mut dyn FnMut(&mut crate::wp::Node, Position<f32>)) -> bool {
         // TODO: check if the mouse is inside the bounds of a page.
 
         let doc = self.document.as_ref().unwrap();
         let mut document = doc.borrow_mut();
 
-        let mouse_position = crate::text_settings::Position::new(mouse_position.x as u32, mouse_position.y as u32);
+        let mouse_position = Position::new(mouse_position.x, mouse_position.y);
         document.hit_test(mouse_position, &mut |node| {
             callback(node, mouse_position);
         })

@@ -61,7 +61,7 @@ impl Scroller {
             thumb_height: InterpolatedValue::new(0.0, 150.0, Self::EASING_FUNC, 0.0..f32::MAX),
 
             bar_rect: Rect::from_position_and_size(Position::new(0.0, 0.0), Size::new(SCROLL_BAR_WIDTH, 0.0)),
-            thumb_rect: Rect::empty(),
+            thumb_rect: Rect::<f32>::empty(),
 
             interaction_state: InteractionState::Default,
         }
