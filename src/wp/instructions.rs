@@ -10,6 +10,15 @@ pub enum FieldType {
     /// Write the current date.
     Date,
 
+    /// Write the page number of the specified bookmark.
+    PageReference(String),
+
+    Reference(String),
+
+    SequentiallyNumber,
+
+    TableOfContents,
+
     /// Write the document title.
     Title,
 }
@@ -26,14 +35,29 @@ impl Field {
     pub fn parse(input: &str) -> Self {
         let mut iter = input.split_ascii_whitespace();
         if let Some(field_type) = iter.next() {
-            println!("Instruction {}", field_type);
             return match field_type {
                 "DATE" => Self {
                     field: FieldType::Date
                 },
 
+                "PAGEREF" => Self {
+                    field: FieldType::PageReference(iter.next().unwrap_or("//INVALID_REFERENCE//").to_string())
+                },
+
+                "REF" => Self {
+                    field: FieldType::Reference(iter.next().unwrap_or("//INVALID_REFERENCE//").to_string())
+                },
+
+                "SEQ" => Self {
+                    field: FieldType::SequentiallyNumber
+                },
+
                 "TITLE" => Self {
                     field: FieldType::Title
+                },
+
+                "TOC" => Self {
+                    field: FieldType::TableOfContents
                 },
 
                 _ => {
@@ -57,6 +81,11 @@ impl Field {
                 // When no format is specified, the current date is formatted in
                 // an implementation-defined manner:
                 chrono::prelude::Local::now().format("%d-%m-%Y").to_string()
+            }
+
+            FieldType::PageReference(..) => {
+                // TODO
+                String::from("99999")
             }
 
             FieldType::Title => {

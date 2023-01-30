@@ -586,7 +586,7 @@ fn process_text_element_in_instructed_field(context: &mut Context,
 }
 
 pub fn append_text_element(text_string: &str, parent: &Rc<RefCell<Node>>, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator) -> Position<f32> {
-    let position = parent.as_ref().borrow().position;
+    let position = line_layout.position_on_line;
     process_text_element_text(parent, line_layout, text_calculator, text_string, position)
 }
 
