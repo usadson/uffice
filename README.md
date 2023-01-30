@@ -4,9 +4,7 @@
 Uffice is an alpha-stage word processor, working on compatibility with WordprocessingML format of the [Office Open Specification (ECMA-376)](https://www.ecma-international.org/publications-and-standards/standards/ecma-376/).
 
 <p align="center">
-   <img src="docs/screenshot/quick-overview.png"
-   alt="Size Limit comment in pull request about bundle size changes"
-   width="641" height="380">
+   <img src="docs/screenshot/quick-overview.png" alt="Demo of the uffice application on Windows." width="641" height="380">
 </p>
 
 ## Installation
@@ -26,16 +24,14 @@ cargo build
 ```
 
 ## Usage
-After having built the binary, running the binary yields no useful results. The environment variable `UFFICE_TEST_FILE` can be used to specify a file to be loaded when the application boots up.
+The application is currently in alpha-stage, and is not yet ready for production use. However, you can still use it to open documents. Editing is not yet supported, but work is being done to add this feature.
 
-Example:
+Currently, files can be opened by specifying their path as arguments to the application. For example, to open the `test.docx` file, you can run the following command:
 ```sh
-# Load the Document.docx file
-export UFFICE_TEST_FILE=/home/user/Document.docx
-
-# Run the application
-cargo run
+cargo run -- test.docx
 ```
+
+A user-interface is still being worked on, but you can drag & drop documents onto the application window to open them.
 
 ## UX Checklist
 The following checklist documents the requirements that have to put in place to help aid new users, installations and usages of the application.
@@ -43,7 +39,6 @@ The following checklist documents the requirements that have to put in place to 
 - [x] Add a CI/CD pipeline
 - [ ] Provide production-ready binaries
 - [ ] Publish a release
-- [ ] Add a build script to auto-install the SFML binaries
 - [ ] Add a user interface to open files
 - [ ] Add a greeting screen, welcoming the user to open a document
 - [ ] Remove the `UFFICE_TEST_FILE` environment variable
