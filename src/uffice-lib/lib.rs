@@ -54,3 +54,13 @@ impl Keyboard {
         self.get_state(key) != KeyState::Released
     }
 }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TwelfteenthPoint<T>(pub T);
+
+impl TwelfteenthPoint<u32> {
+    /// Get the value in points.
+    pub fn get_pts(&self) -> f32 {
+        self.0 as f32 / 12.0
+    }
+}

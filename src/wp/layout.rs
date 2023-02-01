@@ -4,7 +4,6 @@
 use crate::{
     gui::Position,
     text_settings::PageSettings,
-    word_processing::TWELFTEENTH_POINT,
 };
 
 pub struct LineLayout {
@@ -22,13 +21,13 @@ impl LineLayout {
     pub fn new(page_settings: &PageSettings, y: f32) -> Self {
         Self {
             line_height: 0.0,
-            position_on_line: Position::new(page_settings.margins.left() as f32 * TWELFTEENTH_POINT, y),
+            position_on_line: Position::new(page_settings.margins.left().get_pts(), y),
 
-            page_horizontal_start: page_settings.margins.left() as f32 * TWELFTEENTH_POINT,
-            page_horizontal_end: (page_settings.size.width() - page_settings.margins.right()) as f32 * TWELFTEENTH_POINT,
+            page_horizontal_start: page_settings.margins.left().get_pts(),
+            page_horizontal_end: page_settings.size.width().get_pts() - page_settings.margins.right().get_pts(),
 
-            page_vertical_start: page_settings.margins.top() as f32 * TWELFTEENTH_POINT,
-            page_vertical_end: (page_settings.size.height() - page_settings.margins.bottom()) as f32 * TWELFTEENTH_POINT,
+            page_vertical_start: page_settings.margins.top().get_pts(),
+            page_vertical_end: page_settings.size.height().get_pts() - page_settings.margins.bottom().get_pts()
         }
     }
 

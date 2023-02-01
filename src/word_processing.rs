@@ -2,7 +2,7 @@
 // All Rights Reserved.
 
 use roxmltree as xml;
-use uffice_lib::namespaces::XMLNS_RELATIONSHIPS;
+use uffice_lib::{namespaces::XMLNS_RELATIONSHIPS, TwelfteenthPoint};
 use unicode_segmentation::UnicodeSegmentation;
 
 use std::{cell::RefCell, rc::Rc};
@@ -34,10 +34,9 @@ use crate::{
     style::StyleManager,
 };
 
-const CORE_FACTOR: f32 = 1.0f32;
-pub const TWELFTEENTH_POINT: f32 = 1f32 / 12.0 * CORE_FACTOR;
-pub const HALF_POINT: f32 = 0.5 * CORE_FACTOR;
-const LINE_SPACING: f32 = 6.0 * CORE_FACTOR;
+pub const TWELFTEENTH_POINT: f32 = 1f32 / 12.0;
+pub const HALF_POINT: f32 = 0.5;
+const LINE_SPACING: f32 = 6.0;
 
 struct Context<'a> {
     #[allow(dead_code)]
@@ -60,29 +59,29 @@ fn load_page_settings(document: &xml::Document) -> Result<PageSettings, Error> {
             continue;
         }
 
-        let mut page_size = Size::new(10, 10);
-        let mut margins = Rect::<u32>::empty();
+        let mut page_size = Size::empty();
+        let mut margins = Rect::<TwelfteenthPoint<u32>>::empty();
 
-        let mut offset_header = 0;
-        let mut offset_footer = 0;
+        let mut offset_header = TwelfteenthPoint(0);
+        let mut offset_footer = TwelfteenthPoint(0);
 
         for child in root_child.children() {
             match child.tag_name().name() {
                 "pgSz" => {
                     page_size = Size::new(
-                        str::parse(child.attribute((WORD_PROCESSING_XML_NAMESPACE, "w")).expect("No width parameter"))?,
-                        str::parse(child.attribute((WORD_PROCESSING_XML_NAMESPACE, "h")).expect("No height parameter"))?
+                        TwelfteenthPoint(str::parse(child.attribute((WORD_PROCESSING_XML_NAMESPACE, "w")).expect("No width parameter"))?),
+                        TwelfteenthPoint(str::parse(child.attribute((WORD_PROCESSING_XML_NAMESPACE, "h")).expect("No height parameter"))?)
                     );
                 }
                 "pgMar" => {
                     for attribute in child.attributes() {
                         match attribute.name() {
-                            "left" => margins.left = str::parse(attribute.value())?,
-                            "right" => margins.right = str::parse(attribute.value())?,
-                            "top" => margins.top = str::parse(attribute.value())?,
-                            "bottom" => margins.bottom = str::parse(attribute.value())?,
-                            "header" => offset_header = str::parse(attribute.value())?,
-                            "footer" => offset_footer = str::parse(attribute.value())?,
+                            "left" => margins.left.0 = str::parse(attribute.value())?,
+                            "right" => margins.right.0 = str::parse(attribute.value())?,
+                            "top" => margins.top.0 = str::parse(attribute.value())?,
+                            "bottom" => margins.bottom.0 = str::parse(attribute.value())?,
+                            "header" => offset_header.0 = str::parse(attribute.value())?,
+                            "footer" => offset_footer.0 = str::parse(attribute.value())?,
                             _ => ()
                         }
                     }
@@ -106,21 +105,12 @@ pub fn process_document(document: &xml::Document, style_manager: &StyleManager,
                         text_calculator: &mut dyn gui::painter::TextCalculator,
                         progress_sender: &dyn Fn(f32)) -> DocumentResult {
     let text_settings = style_manager.default_text_settings();
-    //text_settings.font = Some(String::from("Calibri"));
-
     let page_settings = load_page_settings(document).unwrap();
 
     let mut position = Position::new(
-        page_settings.margins.left as f32 * TWELFTEENTH_POINT,
-        page_settings.margins.top as f32 * TWELFTEENTH_POINT
+        page_settings.margins.left.get_pts(),
+        page_settings.margins.top.get_pts()
     );
-
-    // println!("Rendering Document:\n\tSize: {} x {}\n\tRender Size: {} x {}",
-    //    page_settings.size.width,
-    //    page_settings.size.height,
-    //    page_settings.size.width as f32 / 12f32,
-    //    page_settings.size.height as f32 / 12f32
-    //);
 
     let doc = Rc::new(
         RefCell::new(

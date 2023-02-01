@@ -4,9 +4,9 @@
 use std::{rc::Rc, cell::RefCell};
 
 use roxmltree as xml;
+use uffice_lib::TwelfteenthPoint;
 
 use crate::{
-    word_processing::TWELFTEENTH_POINT,
     color_parser,
     WORD_PROCESSING_XML_NAMESPACE,
     style::StyleManager,
@@ -24,14 +24,15 @@ use crate::{
 
 #[derive(Clone, Copy, Debug)]
 pub struct PageSettings {
-    pub size: Size<u32>,
-    pub margins: Rect<u32>,
-    pub offset_header: u32,
-    pub offset_footer: u32,
+    pub size: Size<TwelfteenthPoint<u32>>,
+    pub margins: Rect<TwelfteenthPoint<u32>>,
+    pub offset_header: TwelfteenthPoint<u32>,
+    pub offset_footer: TwelfteenthPoint<u32>,
 }
 
 impl PageSettings {
-    pub fn new(size: Size<u32>, margins: Rect<u32>, offset_header: u32, offset_footer: u32) -> Self {
+    pub fn new(size: Size<TwelfteenthPoint<u32>>, margins: Rect<TwelfteenthPoint<u32>>,
+               offset_header: TwelfteenthPoint<u32>, offset_footer: TwelfteenthPoint<u32>) -> Self {
         Self { size, margins, offset_header, offset_footer }
     }
 }
@@ -106,10 +107,10 @@ pub struct TextSettings {
     /// Specifies the indentation which shall be removed from the first line of
     /// the parent paragraph, by moving the indentation on the first line back
     /// towards the beginning of the direction of text flow.
-    pub indentation_hanging: Option<u32>,
+    pub indentation_hanging: Option<TwelfteenthPoint<u32>>,
 
     ///
-    pub indentation_left: Option<u32>,
+    pub indentation_left: Option<TwelfteenthPoint<u32>>,
 }
 
 fn inherit_or_original<T: Clone + std::fmt::Debug>(inherit: &Option<T>, original: &mut Option<T>) {
@@ -235,7 +236,7 @@ impl TextSettings {
         if let Some(indentation) = self.indentation_left {
             //println!("  IndentationLeft: {}", indentation);
 
-            let indentation = indentation as f32 * TWELFTEENTH_POINT;
+            let indentation = indentation.get_pts();
             //println!("  Step: {}", indentation);
 
             let x = ((x / indentation) as u32 + 1) as f32 * indentation;
@@ -256,11 +257,11 @@ impl TextSettings {
         // The w:left is a MSOFFICE quirk I believe, it isn't part
         // of the ECMA/ISO standard.
         if let Some(value) = node.attribute((WORD_PROCESSING_XML_NAMESPACE, "left")) {
-            self.indentation_left = Some(value.parse().unwrap());
+            self.indentation_left = Some(TwelfteenthPoint(value.parse().unwrap()));
         }
 
         if let Some(value) = node.attribute((WORD_PROCESSING_XML_NAMESPACE, "hanging")) {
-            self.indentation_hanging = Some(value.parse().unwrap());
+            self.indentation_hanging = Some(TwelfteenthPoint(value.parse().unwrap()));
         }
     }
 

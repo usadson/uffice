@@ -18,7 +18,7 @@ use crate::{
     },
     word_processing::{
         DocumentResult,
-        self, HALF_POINT, TWELFTEENTH_POINT,
+        self, HALF_POINT,
     },
     application::load_archive_file_to_string,
     relationships::Relationships,
@@ -105,7 +105,18 @@ fn draw_document(archive_path: &str, text_calculator: &mut dyn TextCalculator, p
             .expect("Archive missing word/document.xml: this file is not a WordprocessingML document!");
     let document = xml::Document::parse(&document_text)
             .expect("Failed to parse document");
-    word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager, document_properties, text_calculator, progress_sender)
+
+    let result = word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager, document_properties, text_calculator, progress_sender);
+    result.borrow_mut().apply_recursively(&|node, depth| {
+        println!("{}({}, {}) sized ({} x {}) => {:?}", " ".repeat(depth * 4),
+                node.position.x(),
+                node.position.y(),
+                node.size.width(),
+                node.size.height(),
+                node.data
+        );
+    }, 0);
+    result
 }
 
 impl DocumentView {
@@ -135,14 +146,14 @@ impl DocumentView {
                 })
             };
 
-            let page_width = page_settings.size.width as f32 * event.zoom / 12.0;
-            let page_height = page_settings.size.height as f32 * event.zoom / 12.0;
+            let page_width = page_settings.size.width.get_pts() * event.zoom;
+            let page_height = page_settings.size.height.get_pts() * event.zoom;
             let page_size = Size::new(page_width, page_height);
             let start_x = event.content_rect.left + (event.content_rect.width() as f32 - page_width) / 2.0;
 
             self.page_rects.clear();
             let start_y_pages = (first_page..(last_page + 1)).map(|index| {
-                let page_size_and_margin = (VERTICAL_PAGE_GAP + page_settings.size.height as f32 * TWELFTEENTH_POINT) * event.zoom;
+                let page_size_and_margin = VERTICAL_PAGE_GAP + page_settings.size.height().get_pts() * event.zoom;
                 let start_y = event.content_rect.top + event.start_y + VERTICAL_PAGE_MARGIN * event.zoom + index as f32 * page_size_and_margin;
 
                 if start_y < max_y {

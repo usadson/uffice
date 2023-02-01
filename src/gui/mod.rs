@@ -18,18 +18,20 @@ pub struct Rect<T> {
     pub bottom: T,
 }
 
-impl<T> Rect<T> where T: Copy + std::ops::Add<Output = T> + std::ops::Sub<Output = T> + std::cmp::PartialOrd {
-    pub fn from_positions(left: T, right: T, top: T, bottom: T) -> Self {
-        Self { left, right, top, bottom }
+impl<T> Rect<T> where T: Copy {
+    /// Creates a Rect with no size.
+    pub fn empty() -> Rect<T>
+            where T: Copy + Default {
+        Self {
+            left: Default::default(),
+            right: Default::default(),
+            top: Default::default(),
+            bottom: Default::default(),
+        }
     }
 
-    pub fn from_position_and_size(position: Position<T>, size: Size<T>) -> Self {
-        Self {
-            left: position.x(),
-            right: position.x() + size.width(),
-            top: position.y(),
-            bottom: position.y() + size.height()
-        }
+    pub fn from_positions(left: T, right: T, top: T, bottom: T) -> Self {
+        Self { left, right, top, bottom }
     }
 
     pub fn left(&self) -> T {
@@ -51,9 +53,16 @@ impl<T> Rect<T> where T: Copy + std::ops::Add<Output = T> + std::ops::Sub<Output
     pub fn position(&self) -> Position<T> {
         Position::new(self.left, self.top)
     }
+}
 
-    pub fn size(&self) -> Size<T> {
-        Size::new(self.width(), self.height())
+impl<T> Rect<T> where T: Copy + std::ops::Add<Output = T> + std::ops::Sub<Output = T> + std::cmp::PartialOrd {
+    pub fn from_position_and_size(position: Position<T>, size: Size<T>) -> Self {
+        Self {
+            left: position.x(),
+            right: position.x() + size.width(),
+            top: position.y(),
+            bottom: position.y() + size.height()
+        }
     }
 
     /// Get the width of the Rect.
@@ -66,23 +75,13 @@ impl<T> Rect<T> where T: Copy + std::ops::Add<Output = T> + std::ops::Sub<Output
         self.bottom - self.top
     }
 
+    pub fn size(&self) -> Size<T> {
+        Size::new(self.width(), self.height())
+    }
+
     pub fn is_inside_inclusive(&self, position: Position<T>) -> bool {
         position.x() >= self.left && position.x() <= self.right
             && position.y() >= self.top && position.y() <= self.bottom
-    }
-}
-
-impl Rect<u32> {
-    /// Creates a Rect with no size.
-    pub fn empty() -> Rect<u32> {
-        Self::from_position_and_size(Position::new(0, 0), Size::<u32>::empty())
-    }
-}
-
-impl Rect<f32> {
-    /// Creates a Rect with no size.
-    pub fn empty() -> Rect<f32> {
-        Self::from_position_and_size(Position::new(0.0, 0.0), Size::<f32>::empty())
     }
 }
 
@@ -143,6 +142,12 @@ impl From<Size<f32>> for Size<u32> {
 }
 
 impl<T> Size<T> where T: Copy {
+    /// Creates a size with no width or height.
+    pub fn empty() -> Size<T>
+            where T: Copy + Default {
+        Self { width: Default::default(), height: Default::default() }
+    }
+
     pub fn new(width: T, height: T) -> Self {
         Self { width, height }
     }
@@ -153,20 +158,6 @@ impl<T> Size<T> where T: Copy {
 
     pub fn height(&self) -> T {
         self.height
-    }
-}
-
-impl Size<f32> {
-    /// Creates a size with no width or height.
-    pub fn empty() -> Size<f32> {
-        Self { width: 0.0, height: 0.0 }
-    }
-}
-
-impl Size<u32> {
-    /// Creates a size with no width or height.
-    pub fn empty() -> Size<u32> {
-        Self { width: 0, height: 0 }
     }
 }
 
