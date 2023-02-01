@@ -1,6 +1,8 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+use winit::event::{MouseButton, ElementState};
+
 use crate::user_settings::{SettingChangeSubscriber, SettingChangeNotification, SettingName};
 
 use super::{
@@ -11,7 +13,7 @@ use super::{
     Position,
     Size,
     Rect,
-    InteractionState
+    InteractionState, MouseMoveEvent, EventVisualReaction
 };
 
 pub const SCROLL_BAR_WIDTH: f32 = 15.0;
@@ -138,7 +140,6 @@ impl Scroller {
         );
     }
 
-    #[allow(dead_code)] // TODO
     pub fn apply_mouse_offset(&mut self, value: f32) {
         let speed = self.view_height as f32 - self.thumb_rect.height();
         self.value.increase(value / speed);
@@ -146,6 +147,34 @@ impl Scroller {
 
     pub fn position(&mut self) -> f32 {
         self.value.get()
+    }
+
+    pub fn on_mouse_input(&mut self, mouse_position: Position<f32>, button: MouseButton, state: ElementState) {
+        if button != MouseButton::Left {
+            return;
+        }
+
+        self.interaction_state = match state {
+            ElementState::Pressed => {
+                if self.thumb_rect.is_inside_inclusive(mouse_position) {
+                    InteractionState::Pressed
+                } else {
+                    InteractionState::Default
+                }
+            },
+            ElementState::Released => InteractionState::Default,
+        };
+    }
+
+    pub fn on_mouse_move(&mut self, event: &mut MouseMoveEvent) {
+        if self.interaction_state == InteractionState::Pressed {
+            self.apply_mouse_offset(event.delta_y);
+            event.reaction = EventVisualReaction::ContentUpdated;
+        }
+    }
+
+    pub fn on_window_focus_lost(&mut self) {
+        self.interaction_state = InteractionState::Default;
     }
 }
 

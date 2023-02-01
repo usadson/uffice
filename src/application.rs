@@ -18,6 +18,7 @@ use windows::Win32::UI::WindowsAndMessaging::MB_ICONERROR;
 use windows::Win32::UI::WindowsAndMessaging::MB_OK;
 use windows::Win32::UI::WindowsAndMessaging::MessageBoxA;
 use winit::event::ElementState;
+use winit::event::MouseButton;
 use winit::event::VirtualKeyCode;
 use winit::event::WindowEvent;
 use winit::window::Window;
@@ -30,6 +31,9 @@ use winit::{
 };
 
 use crate::gui::Brush;
+use crate::gui::EventVisualReaction;
+use crate::gui::InteractionState;
+use crate::gui::MouseMoveEvent;
 use crate::gui::Position;
 use crate::gui::Rect;
 use crate::gui::painter::FontSpecification;
@@ -366,6 +370,20 @@ impl Tab {
     pub fn has_running_animations(&mut self) -> bool {
         self.zoomer.has_running_animation() || self.scroller.has_running_animation()
     }
+
+    pub fn on_mouse_input(&mut self, mouse_position: Position<f32>, button: MouseButton, state: ElementState) {
+        self.scroller.on_mouse_input(mouse_position, button, state);
+    }
+
+    pub fn on_mouse_move(&mut self, event: &mut MouseMoveEvent) {
+        if self.scroller.bar_rect.is_inside_inclusive(event.position) || self.scroller.interaction_state != InteractionState::Default {
+            self.scroller.on_mouse_move(event);
+        }
+    }
+
+    pub fn on_window_focus_lost(&mut self) {
+        self.scroller.on_window_focus_lost();
+    }
 }
 
 impl TabWidgetItem for Tab {
@@ -395,6 +413,7 @@ pub struct App {
     tab_widget: TabWidget<Tab>,
 
     keyboard: uffice_lib::Keyboard,
+    mouse_position: Position<f32>,
     user_settings: UserSettings,
 
     previous_frame_had_running_animations: bool,
@@ -410,6 +429,7 @@ impl App {
             tab_widget: TabWidget::new(),
 
             keyboard: uffice_lib::Keyboard::new(),
+            mouse_position: Position::new(0.0, 0.0),
             user_settings: UserSettings::load(),
 
             previous_frame_had_running_animations: false,
@@ -472,6 +492,18 @@ impl App {
 
         self.current_visible_tab = Some(tab_id);
         window.request_redraw();
+    }
+
+    fn handle_tab_mouse_move(&mut self, event: &mut MouseMoveEvent) {
+        let Some(tab_id) = self.current_visible_tab else {
+            return;
+        };
+
+        let Some(tab) = self.tabs.get_mut(&tab_id) else {
+            return;
+        };
+
+        tab.on_mouse_move(event);
     }
 
     fn handle_user_event(&mut self, window: &mut winit::window::Window, event: AppEvent) {
@@ -677,6 +709,62 @@ impl crate::gui::app::GuiApp for App {
                 let size = size.to_logical(window.scale_factor());
                 let size = Size::new(size.width, size.height);
                 self.tab_widget.on_window_resize(size);
+            }
+
+            Event::WindowEvent { event: WindowEvent::Focused(is_focused), .. } => {
+                if !is_focused {
+                    self.tab_widget.on_window_focus_lost();
+                    if let Some(tab_id) = self.current_visible_tab {
+                        self.tabs.get_mut(&tab_id).unwrap().on_window_focus_lost();
+                    }
+                }
+            }
+
+            Event::WindowEvent { event: WindowEvent::CursorMoved { position, .. }, .. } => {
+                let position = position.to_logical::<f32>(window.scale_factor());
+                let position = Position::new(position.x, position.y);
+
+                let mut event = MouseMoveEvent {
+                    reaction: EventVisualReaction::Ignored,
+
+                    position,
+                    previous_position: self.mouse_position,
+                    delta_x: position.x() - self.mouse_position.x(),
+                    delta_y: position.y() - self.mouse_position.y(),
+                };
+
+                self.mouse_position = position;
+
+                let was_inside_widget = self.tab_widget.rect().is_inside_inclusive(self.mouse_position);
+                let is_inside_widget = self.tab_widget.rect().is_inside_inclusive(self.mouse_position);
+
+                if was_inside_widget && !is_inside_widget {
+                    self.tab_widget.on_mouse_leave(&mut event);
+                    self.tab_widget.on_mouse_move(&mut event);
+                } else if is_inside_widget && !was_inside_widget {
+                    self.tab_widget.on_mouse_enter(&mut event);
+                    self.tab_widget.on_mouse_move(&mut event);
+                } else if is_inside_widget && was_inside_widget {
+                    self.tab_widget.on_mouse_move(&mut event);
+                }
+
+                self.handle_tab_mouse_move(&mut event);
+
+                if event.reaction == EventVisualReaction::ContentUpdated {
+                    window.request_redraw();
+                }
+            }
+
+            Event::WindowEvent { event: WindowEvent::MouseInput { button, state, .. }, .. } => {
+                if self.tab_widget.rect().is_inside_inclusive(self.mouse_position) {
+                    self.tab_widget.on_mouse_input(self.mouse_position, button, state);
+                    return;
+                }
+
+                if let Some(tab_id) = self.current_visible_tab {
+                    let tab = self.tabs.get_mut(&tab_id).unwrap();
+                    tab.on_mouse_input(self.mouse_position, button, state);
+                }
             }
 
             Event::DeviceEvent { event: DeviceEvent::Key(keyboard), .. } => {

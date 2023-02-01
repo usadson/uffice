@@ -3,13 +3,32 @@
 
 use std::marker::PhantomData;
 
-use super::{painter::{Painter, FontSpecification}, Size, Position, Rect, Color, Brush};
+use winit::event::{MouseButton, ElementState};
+
+use super::{
+    painter::{Painter, FontSpecification},
+    Brush,
+    Color,
+    MouseMoveEvent,
+    Position,
+    Rect,
+    Size,
+};
 
 const TAB_MAX_WIDTH: f32 = 220.0;
 const TAB_PADDING: f32 = 6.0;
 
 pub trait Widget {
     fn rect(&self) -> Rect<f32>;
+    fn on_mouse_enter(&mut self, event: &mut MouseMoveEvent);
+    fn on_mouse_input(&mut self, mouse_position: Position<f32>, button: MouseButton, state: ElementState);
+    fn on_mouse_leave(&mut self, event: &mut MouseMoveEvent);
+    fn on_mouse_move(&mut self, event: &mut MouseMoveEvent);
+
+    fn on_window_focus_lost(&mut self);
+
+    /// There is no `EventVisualReaction`, because the contents of the
+    /// window are always redrawn when the window is resized.
     fn on_window_resize(&mut self, window_size: Size<u32>);
 }
 
@@ -100,6 +119,26 @@ impl<'a, TabItem> Widget for TabWidget<TabItem>
         where TabItem: TabWidgetItem + 'a {
     fn rect(&self) -> Rect<f32> {
         self.bar_rect
+    }
+
+    fn on_mouse_enter(&mut self, _event: &mut MouseMoveEvent) {
+
+    }
+
+    fn on_mouse_input(&mut self, _mouse_position: Position<f32>, _button: MouseButton, _state: ElementState) {
+
+    }
+
+    fn on_mouse_leave(&mut self, _event: &mut MouseMoveEvent) {
+
+    }
+
+    fn on_mouse_move(&mut self, _event: &mut MouseMoveEvent) {
+
+    }
+
+    fn on_window_focus_lost(&mut self) {
+
     }
 
     fn on_window_resize(&mut self, window_size: Size<u32>) {

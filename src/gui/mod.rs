@@ -336,6 +336,7 @@ unsafe impl Send for AppEvent {}
 
 /// Defines the state a component is in. This ensures the correct animations and
 /// subsequent state. This state doesn't track state transitions, however.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum InteractionState {
     /// The component is hovered or pressed.
     Default,
@@ -345,4 +346,23 @@ pub enum InteractionState {
 
     /// The user is clicking on the component.
     Pressed,
+}
+
+/// The `EventVisualReaction` specifies in which way the handler visually
+/// reacted to the event.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[must_use]
+pub enum EventVisualReaction {
+    Ignored,
+    ContentUpdated,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct MouseMoveEvent {
+    pub reaction: EventVisualReaction,
+
+    pub position: Position<f32>,
+    pub previous_position: Position<f32>,
+    pub delta_x: f32,
+    pub delta_y: f32,
 }
