@@ -3,6 +3,8 @@
 
 use std::{rc::Rc, cell::RefCell};
 
+use super::Document;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FieldType {
     Unknown,
@@ -75,7 +77,7 @@ impl Field {
         }
     }
 
-    pub fn resolve_to_string(&self, node: &Rc<RefCell<crate::wp::Node>>) -> String {
+    pub fn resolve_to_string(&self, document: &mut Document, node: &Rc<RefCell<crate::wp::Node>>) -> String {
         match &self.field {
             FieldType::Date => {
                 // When no format is specified, the current date is formatted in
@@ -89,12 +91,8 @@ impl Field {
             }
 
             FieldType::Title => {
-                let document = node.as_ref().borrow().find_document();
-                let document = document.as_ref().borrow();
-                if let crate::wp::NodeData::Document(document) = &document.data {
-                    if let Some(title) = &document.document_properties.title {
-                        return title.clone();
-                    }
+                if let Some(title) = &document.document_properties.title {
+                    return title.clone();
                 }
 
                 String::from("Title Missing")

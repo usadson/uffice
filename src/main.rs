@@ -33,7 +33,7 @@ fn main() {
 
     let mut args = CommandLineArguments::parse();
 
-    #[cfg(debug_assertions)]
+    //#[cfg(debug_assertions)]
     if args.files.is_empty() {
         if let Ok(test_file) = std::env::var("UFFICE_TEST_FILE") {
             args.files.push(test_file);

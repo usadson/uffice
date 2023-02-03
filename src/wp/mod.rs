@@ -7,7 +7,7 @@ pub mod layout;
 pub mod numbering;
 
 use std::{
-    rc::{Rc, Weak},
+    rc::{Rc},
     cell::RefCell,
 };
 
@@ -30,7 +30,7 @@ use crate::{
 pub enum NodeData {
     /// Line, column or page break.
     Break,
-    Document(Document),
+    Document,
     Drawing(crate::drawing_ml::DrawingObject),
     Hyperlink(Hyperlink),
 
@@ -50,11 +50,7 @@ pub enum NodeData {
 
 impl NodeData {
     pub fn is_document(&self) -> bool {
-        if let NodeData::Document(..) = &self {
-            return true;
-        }
-
-        false
+        matches!(self, Self::Document)
     }
 }
 
@@ -77,13 +73,15 @@ impl Default for InteractionStates {
     }
 }
 
+pub type NodeReference = thunderdome::Index;
+
 #[derive(Debug)]
 pub struct Node {
 
-    pub parent: Weak<RefCell<Node>>,
+    pub parent: Option<NodeReference>,
 
     /// Can be None when this element isn't allowed to have children
-    pub children: Option<Vec<Rc<RefCell<Node>>>>,
+    pub children: Option<Vec<NodeReference>>,
     pub data: NodeData,
 
     /// The page number this node is starting on.
@@ -105,7 +103,7 @@ pub struct Node {
 impl Node {
     pub fn new(data: NodeData) -> Self {
         Self {
-            parent: Weak::new(),
+            parent: None,
             children: Some(vec![]),
 
             data,
@@ -119,50 +117,31 @@ impl Node {
     }
 
     /// Run the `callback` function recursively on itself and it's descendants.
-    pub fn apply_recursively(&mut self, callback: &dyn Fn(&mut Node, usize), depth: usize) {
+    pub fn apply_recursively(&mut self, document: &mut Document, callback: &dyn Fn(&mut Node, usize), depth: usize) {
         callback(self, depth);
 
         if let Some(children) = &mut self.children {
             for child in children {
-                child.borrow_mut().apply_recursively(callback, depth + 1);
+                document.node_arena.get_mut(*child).unwrap().apply_recursively(document, callback, depth + 1);
             }
         }
     }
 
     /// Run the `callback` function recursively on itself and it's descendants.
-    pub fn apply_recursively_mut(&mut self, callback: &mut dyn FnMut(&mut Node, usize), depth: usize) {
+    pub fn apply_recursively_mut(&mut self, document: &mut Document, callback: &mut dyn FnMut(&mut Node, usize), depth: usize) {
         callback(self, depth);
 
         if let Some(children) = &mut self.children {
             for child in children {
-                child.borrow_mut().apply_recursively_mut(callback, depth + 1);
+                document.node_arena.get_mut(*child).unwrap().apply_recursively_mut(document, callback, depth + 1);
             }
         }
     }
 
-    pub fn find_document(&self) -> Rc<RefCell<Node>> {
-        if let NodeData::Document(..) = &self.data {
-            panic!("find_document whilst we are a document!");
-        }
-
-        if let Some(parent) = self.parent.upgrade() {
-            let parent_ref = parent.clone();
-            let parent_ref = parent_ref.as_ref().borrow();
-            let is_document = parent_ref.data.is_document();
-            drop(parent_ref);
-
-            if is_document {
-                return parent;
-            }
-        }
-
-        panic!("No document found in tree");
-    }
-
-    pub fn on_event(&mut self, event: &mut Event) {
+    pub fn on_event(&mut self, document: &mut Document, event: &mut Event) {
         if let Some(children) = &mut self.children {
             for child in children {
-                child.borrow_mut().on_event(event);
+                document.node_arena.get_mut(*child).unwrap().on_event(document, event);
             }
         }
 
@@ -174,10 +153,10 @@ impl Node {
     /// Returns the hit test result.
     ///
     /// If Some, the vector contains the innermost to outermost nodes that were in the hit path.
-    pub fn hit_test(&mut self, position: Position<f32>, callback: &mut dyn FnMut(&mut Node)) -> bool {
+    pub fn hit_test(&mut self, document: &mut Document, position: Position<f32>, callback: &mut dyn FnMut(&mut Node)) -> bool {
         if let Some(children) = &mut self.children {
             for child in children {
-                if child.borrow_mut().hit_test(position, callback) {
+                if document.node_arena.get_mut(*child).unwrap().hit_test(document, position, callback) {
                     callback(self);
                     return true;
                 }
@@ -199,39 +178,49 @@ impl Node {
     }
 
     /// Sets the last page number of this Node and all it's parents.
-    pub fn set_last_page_number(&mut self, page_number: usize) {
+    pub fn set_last_page_number(&mut self, document: &mut Document, page_number: usize) {
         assert!(self.page_last <= page_number);
         self.page_last = page_number;
 
-        if let Some(parent) = self.parent.upgrade() {
-            parent.borrow_mut().set_last_page_number(page_number);
+        if let Some(parent) = self.parent {
+            document.node_arena.get_mut(parent).unwrap().set_last_page_number(document, page_number);
         } else {
-            assert!(matches!(self.data, NodeData::Document(..)));
+            assert!(matches!(self.data, NodeData::Document));
         }
     }
 }
 
-pub fn append_child<'b>(parent_ref: &Rc<RefCell<Node>>, mut node: Node) -> Rc<RefCell<Node>> {
-    let mut parent = parent_ref.borrow_mut();
-    node.parent = Rc::downgrade(&parent_ref);
-    node.text_settings = parent.text_settings.clone();
-    node.page_first = parent.page_last;
-    node.page_last = parent.page_last;
-    node.position = parent.position;
+pub fn append_child<'b>(document: &mut Document, parent: NodeReference, mut node: Node) -> NodeReference {
+    node.parent = Some(parent);
 
-    if let Some(children) = &mut parent.children {
-        children.push(Rc::new(RefCell::new(node)));
-        return children.last_mut().unwrap().clone();
+    if let Some(parent) = document.node_arena.get(parent) {
+        node.text_settings = parent.text_settings.clone();
+        node.page_first = parent.page_last;
+        node.page_last = parent.page_last;
+        node.position = parent.position;
     }
 
-    panic!("Node isn't allowed to have children: {:?}", parent.data);
+    let node = document.node_arena.insert(node);
+
+    if let Some(parent) = document.node_arena.get_mut(parent) {
+        if let Some(children) = &mut parent.children {
+            children.push(node);
+            return node;
+        }
+
+        panic!("Node isn't allowed to have children: {:?}", parent.data);
+    } else {
+        panic!("Parent reference is invalid: {:?}", parent);
+    }
+
+    // document.node_arena.remove(node);
 }
 
-pub fn create_child(parent_ref: &Rc<RefCell<Node>>, data: NodeData) -> Rc<RefCell<Node>> {
-    let mut parent = parent_ref.borrow_mut();
+pub fn create_child(document: &mut Document, parent_ref: NodeReference, data: NodeData) -> NodeReference {
+    let parent = document.node_arena.get(parent_ref).unwrap();
     let node = Node {
-        parent: Rc::downgrade(&parent_ref),
-        children: Some(vec![]),
+        parent: Some(parent_ref),
+        children: Some(Vec::new()),
         data,
         page_first: parent.page_last,
         page_last: parent.page_last,
@@ -240,22 +229,23 @@ pub fn create_child(parent_ref: &Rc<RefCell<Node>>, data: NodeData) -> Rc<RefCel
         size: Default::default(),
         interaction_states: Default::default(),
     };
+    drop(parent);
 
-    if let Some(children) = &mut parent.children {
-        children.push(Rc::new(RefCell::new(node)));
-        return children.last_mut().unwrap().clone();
+    let node = document.node_arena.insert(node);
+
+    if let Some(parent) = document.node_arena.get_mut(node) {
+        if let Some(children) = &mut parent.children {
+            children.push(node);
+            return children.last_mut().unwrap().clone();
+        }
     }
 
     panic!("Node isn't allowed to have children: {:?}", parent.data);
 }
 
 impl Document {
-    pub fn new(text_settings: TextSettings, page_settings: PageSettings,
-               document_properties: document_properties::DocumentProperties) -> Node {
-        let mut node = Node::new(NodeData::Document(Self {
-            page_settings,
-            document_properties
-        }));
+    pub fn new(text_settings: TextSettings) -> Node {
+        let mut node = Node::new(NodeData::Document);
 
         node.text_settings = text_settings;
 
@@ -287,8 +277,25 @@ pub struct Paragraph;
 
 #[derive(Debug)]
 pub struct Document {
+    pub node_arena: thunderdome::Arena<Node>,
     pub page_settings: PageSettings,
     pub document_properties: document_properties::DocumentProperties,
+}
+
+impl Document {
+    pub fn set_last_page_number(&mut self, mut node_ref: NodeReference, page_number: usize) {
+        while let Some(node) = self.node_arena.get(node_ref) {
+            if node.page_last < page_number {
+                node.page_last = page_number;
+            }
+
+            if let Some(parent) = node.parent {
+                node_ref = parent;
+            } else {
+                return;
+            }
+        }
+    }
 }
 
 #[derive(Debug)]

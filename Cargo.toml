@@ -22,6 +22,7 @@ roxmltree = "*"
 raw-window-handle = "0.5.0"
 structopt = "*"
 strum_macros = "*"
+thunderdome = "*"
 unicode-segmentation = "*"
 url = "*"
 vulkano = "*"
@@ -63,3 +64,6 @@ path = "src/bin/analysis-tool/main.rs"
 [lib]
 name = "uffice_lib"
 path = "src/uffice-lib/lib.rs"
+
+[profile.release]
+debug = true

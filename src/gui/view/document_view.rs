@@ -107,7 +107,7 @@ fn draw_document(archive_path: &str, text_calculator: &mut dyn TextCalculator, p
             .expect("Failed to parse document");
 
     let result = word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager, document_properties, text_calculator, progress_sender);
-    result.borrow_mut().apply_recursively(&|node, depth| {
+    .apply_recursively(&|node, depth| {
         println!("{}({}, {}) sized ({} x {}) => {:?}", " ".repeat(depth * 4),
                 node.position.x(),
                 node.position.y(),
