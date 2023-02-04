@@ -76,7 +76,7 @@ impl Default for InteractionStates {
 #[derive(Debug)]
 pub struct Node {
     /// Can be None when this element isn't allowed to have children
-    pub children: Option<Vec<Node>>,
+    pub children: Vec<Node>,
     pub data: NodeData,
 
     /// The page number this node is starting on.
@@ -98,7 +98,7 @@ pub struct Node {
 impl Node {
     pub fn new(data: NodeData) -> Self {
         Self {
-            children: Some(vec![]),
+            children: Vec::new(),
 
             data,
             page_first: 0,
@@ -113,10 +113,8 @@ impl Node {
     pub fn apply_recursively(&mut self, callback: &dyn Fn(&mut Node, usize), depth: usize) {
         callback(self, depth);
 
-        if let Some(children) = &mut self.children {
-            for child in children {
-                child.apply_recursively(callback, depth + 1);
-            }
+        for child in &mut self.children {
+            child.apply_recursively(callback, depth + 1);
         }
     }
 
@@ -124,18 +122,14 @@ impl Node {
     pub fn apply_recursively_mut(&mut self, callback: &mut dyn FnMut(&mut Node, usize), depth: usize) {
         callback(self, depth);
 
-        if let Some(children) = &mut self.children {
-            for child in children {
-                child.apply_recursively_mut(callback, depth + 1);
-            }
+        for child in &mut self.children {
+            child.apply_recursively_mut(callback, depth + 1);
         }
     }
 
     pub fn on_event(&mut self, event: &mut Event) {
-        if let Some(children) = &mut self.children {
-            for child in children {
-                child.on_event(event);
-            }
+        for child in &mut self.children {
+            child.on_event(event);
         }
 
         if let NodeData::Hyperlink(hyperlink) = &self.data {
@@ -147,12 +141,10 @@ impl Node {
     ///
     /// If Some, the vector contains the innermost to outermost nodes that were in the hit path.
     pub fn hit_test(&self, position: Position<f32>, callback: &mut dyn FnMut(&Node)) -> bool {
-        if let Some(children) = &self.children {
-            for child in children {
-                if child.hit_test(position, callback) {
-                    callback(self);
-                    return true;
-                }
+        for child in &self.children {
+            if child.hit_test(position, callback) {
+                callback(self);
+                return true;
             }
         }
 
@@ -171,17 +163,15 @@ impl Node {
     }
 
     pub fn nth_child_mut(&mut self, index: usize) -> &mut Node {
-        &mut self.children.as_mut().unwrap()[index]
+        &mut self.children[index]
     }
 
     pub fn update_page_last(&mut self) -> usize {
         let mut last_page = self.page_last;
-        if let Some(children) = &mut self.children {
-            for child in children {
-                let child_last_page = child.update_page_last();
-                if last_page < child_last_page {
-                    last_page = child_last_page;
-                }
+        for child in &mut self.children {
+            let child_last_page = child.update_page_last();
+            if last_page < child_last_page {
+                last_page = child_last_page;
             }
         }
 
@@ -198,11 +188,11 @@ impl Node {
 
     pub fn check_last_page_number_from_new_child(&mut self) {
         let mut last_page = self.page_last;
-        if let Some(children) = &self.children {
-            if let Some(last) = children.last() {
-                last_page = last.page_last;
-            }
+
+        if let Some(last) = self.children.last() {
+            last_page = last.page_last;
         }
+
         self.propose_last_page_number(last_page);
     }
 }
@@ -213,17 +203,13 @@ pub fn append_child(parent: &mut Node, mut node: Node) -> usize {
     node.page_last = parent.page_last;
     node.position = parent.position;
 
-    if let Some(children) = &mut parent.children {
-        children.push(node);
-        return children.len() - 1;
-    }
-
-    panic!("Node isn't allowed to have children: {:?}", parent.data);
+    parent.children.push(node);
+    parent.children.len() - 1
 }
 
 pub fn create_child<'b>(parent: &mut Node, data: NodeData) -> usize {
     let node = Node {
-        children: Some(Vec::new()),
+        children: Vec::new(),
         data,
         page_first: parent.page_last,
         page_last: parent.page_last,

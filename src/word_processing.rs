@@ -713,7 +713,7 @@ fn process_text_run_element(context: &mut Context,
     let mut position = position;
 
     let instruction = (|| {
-        for child in parent.children.as_ref().unwrap() {
+        for child in &parent.children {
             match &child.data {
                 crate::wp::NodeData::TextRun(run) => if let Some(instruction) = &run.instruction {
                     return Some(instruction.clone());
@@ -737,10 +737,8 @@ fn process_text_run_element(context: &mut Context,
                 // TODO: phase out the following code when the `position`
                 //       parameters are fully replaced by the LineLayout
                 //       system.
-                if let Some(children) = &text_run.children {
-                    if let Some(child) = children.last() {
-                        position = child.position;
-                    }
+                if let Some(child) = text_run.children.last() {
+                    position = child.position;
                 }
                 // End TODO
             }
