@@ -414,6 +414,7 @@ pub struct App {
 
     keyboard: uffice_lib::Keyboard,
     mouse_position: Position<f32>,
+    mouse_inside_window: bool,
     user_settings: UserSettings,
 
     previous_frame_had_running_animations: bool,
@@ -430,6 +431,7 @@ impl App {
 
             keyboard: uffice_lib::Keyboard::new(),
             mouse_position: Position::new(0.0, 0.0),
+            mouse_inside_window: false,
             user_settings: UserSettings::load(),
 
             previous_frame_had_running_animations: false,
@@ -691,12 +693,24 @@ impl crate::gui::app::GuiApp for App {
             Event::DeviceEvent {
                 event: DeviceEvent::MouseWheel { delta }, ..
             } => {
+                if !self.mouse_inside_window {
+                    return;
+                }
+
                 if let Some(current_tab_id) = self.current_visible_tab {
                     let should_scroll = self.tabs.get_mut(&current_tab_id).unwrap().on_scroll(delta, &self.keyboard);
                     if should_scroll {
                         window.request_redraw();
                     }
                 }
+            }
+
+            Event::WindowEvent { event: WindowEvent::CursorLeft { .. }, .. } => {
+                self.mouse_inside_window = false;
+            }
+
+            Event::WindowEvent { event: WindowEvent::CursorEntered { .. }, .. } => {
+                self.mouse_inside_window = false;
             }
 
             Event::WindowEvent { event: WindowEvent::DroppedFile(path), .. } => {
@@ -721,6 +735,8 @@ impl crate::gui::app::GuiApp for App {
             }
 
             Event::WindowEvent { event: WindowEvent::CursorMoved { position, .. }, .. } => {
+                self.mouse_inside_window = true;
+
                 let position = position.to_logical::<f32>(window.scale_factor());
                 let position = Position::new(position.x, position.y);
 
