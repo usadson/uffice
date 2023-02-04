@@ -10,7 +10,10 @@ use crate::{
     color_parser,
     WORD_PROCESSING_XML_NAMESPACE,
     style::StyleManager,
-    wp::layout::LineLayout,
+    wp::{
+        layout::LineLayout,
+        Node,
+    },
     gui::Color,
     gui::{
         painter::{
@@ -50,9 +53,8 @@ pub struct Numbering {
     pub level: Option<i32>,
 }
 impl Numbering {
-    pub fn create_node(&self, paragraph: &Rc<RefCell<crate::wp::Node>>, line_layout: &mut LineLayout,
-                       text_calculator: &mut dyn TextCalculator) -> Rc<RefCell<crate::wp::Node>> {
-        assert!(paragraph.try_borrow_mut().is_ok());
+    pub fn create_node(&self, paragraph: &mut Node, line_layout: &mut LineLayout,
+                       text_calculator: &mut dyn TextCalculator) -> (usize, usize) {
         let numbering_definition_instance = &self.definition
                 .as_ref()
                 .unwrap().as_ref().borrow_mut();
@@ -75,12 +77,14 @@ impl Numbering {
 
         // See the documentation of NodeData::NumberingParent for why we need
         // this parent and not just inherit from the parent Paragraph.
-        let numbering_parent = crate::wp::create_child(&paragraph, crate::wp::NodeData::NumberingParent);
-        numbering_parent.borrow_mut().text_settings = self.combine_text_settings(&paragraph.as_ref().borrow(), &level);
+        let numbering_parent = crate::wp::create_child(paragraph, crate::wp::NodeData::NumberingParent);
+        let text_settings = self.combine_text_settings(paragraph, &level);
 
-        crate::word_processing::append_text_element(&displayed_text, &numbering_parent, line_layout, text_calculator);
-        let numbering_parent = numbering_parent.as_ref().borrow();
-        numbering_parent.children.as_ref().unwrap().last().unwrap().clone()
+        let num_parent = paragraph.nth_child_mut(numbering_parent);
+        num_parent.text_settings = text_settings;
+
+        crate::word_processing::append_text_element(&displayed_text, num_parent, line_layout, text_calculator);
+        (numbering_parent, 0)
     }
 
     fn combine_text_settings(&self, paragraph: &crate::wp::Node, level: &crate::wp::numbering::NumberingLevelDefinition) -> TextSettings {

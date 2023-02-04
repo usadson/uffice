@@ -53,11 +53,11 @@ pub trait ViewImpl {
     /// scroll.
     fn calculate_content_height(&self) -> f32;
 
-    fn check_interactable_for_mouse(&self, mouse_position: Position<f32>,
+    fn check_interactable_for_mouse(&mut self, mouse_position: Position<f32>,
         callback: &mut dyn FnMut(&mut crate::wp::Node, Position<f32>)) -> bool;
 
     /// Print the document tree to stdout.
-    fn dump_dom_tree(&self);
+    fn dump_dom_tree(&mut self);
 
     fn handle_event(&mut self, event: &mut Event);
 }

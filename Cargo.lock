@@ -2020,12 +2020,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "thunderdome"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6622a25a2ebb440f5de09ab4aa507c3a539f77c891d1dfc95a52c35fd58a5621"
-
-[[package]]
 name = "time"
 version = "0.1.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2142,7 +2136,6 @@ dependencies = [
  "roxmltree",
  "structopt",
  "strum_macros",
- "thunderdome",
  "unicode-segmentation",
  "url",
  "utfx",

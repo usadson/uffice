@@ -1,8 +1,6 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::{rc::Rc, cell::RefCell};
-
 use super::Document;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -77,7 +75,7 @@ impl Field {
         }
     }
 
-    pub fn resolve_to_string(&self, document: &mut Document, node: &Rc<RefCell<crate::wp::Node>>) -> String {
+    pub fn resolve_to_string(&self, document: &mut Document) -> String {
         match &self.field {
             FieldType::Date => {
                 // When no format is specified, the current date is formatted in

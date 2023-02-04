@@ -5,8 +5,6 @@ use roxmltree as xml;
 use uffice_lib::{namespaces::XMLNS_RELATIONSHIPS, TwelfteenthPoint};
 use unicode_segmentation::UnicodeSegmentation;
 
-use std::{cell::RefCell, rc::Rc};
-
 use crate::{
     *,
     text_settings::{
@@ -25,7 +23,7 @@ use crate::{
         Document,
         layout::LineLayout,
         Node,
-        numbering, NodeReference,
+        numbering, instructions,
     },
     gui::painter::{
         TextCalculator,
@@ -49,18 +47,6 @@ struct Context<'a> {
     page_settings: PageSettings,
 
     numbering_manager: wp::numbering::NumberingManager,
-}
-
-impl<'a> Context<'a> {
-
-    pub fn get_node(&self, node: NodeReference) -> &Node {
-        self.document.node_arena.get(node).unwrap()
-    }
-
-    pub fn get_node_mut(&mut self, node: NodeReference) -> &mut Node {
-        self.document.node_arena.get_mut(node).unwrap()
-    }
-
 }
 
 fn load_page_settings(document: &xml::Document) -> Result<PageSettings, Error> {
@@ -109,7 +95,7 @@ fn load_page_settings(document: &xml::Document) -> Result<PageSettings, Error> {
 
 pub struct DocumentResult {
     pub document: Document,
-    pub root_node: NodeReference,
+    pub root_node: Node,
 }
 
 pub fn process_document(xml_document: &xml::Document, style_manager: &StyleManager,
@@ -126,13 +112,12 @@ pub fn process_document(xml_document: &xml::Document, style_manager: &StyleManag
         page_settings.margins.top.get_pts()
     );
 
-    let document = Document {
-        node_arena: thunderdome::Arena::new(),
+    let mut document = Document {
         page_settings,
         document_properties
     };
 
-    let root_node = document.node_arena.insert(Document::new(text_settings));
+    let mut root_node = Document::new(text_settings);
 
     let mut context = Context{
         document: &mut document,
@@ -147,17 +132,17 @@ pub fn process_document(xml_document: &xml::Document, style_manager: &StyleManag
     };
 
     for child in xml_document.root_element().children() {
-        // println!("{}", child.tag_name().name());
-
         if child.tag_name().name() == "body" {
-            position = process_body_element(&mut context, root_node, &child, position);
+            position = process_body_element(&mut context, &mut root_node, &child, position);
         }
     }
+
+    root_node.update_page_last();
 
     DocumentResult { document, root_node }
 }
 
-fn process_drawing_element(context: &mut Context, parent: NodeReference,
+fn process_drawing_element(context: &mut Context, parent: &mut Node,
                            node: &xml::Node, position: Position<f32>) -> Position<f32> {
     for child in node.children() {
         match child.tag_name().name() {
@@ -165,11 +150,10 @@ fn process_drawing_element(context: &mut Context, parent: NodeReference,
                 let drawing_object = drawing_ml::DrawingObject::parse_inline_object(&child, context.document_relationships);
                 let size = drawing_object.size();
 
-                let inline_drawing = wp::create_child(context.document, parent, wp::NodeData::Drawing(drawing_object));
-                context.get_node_mut(inline_drawing).size = size;
+                let inline_drawing = wp::create_child(parent, wp::NodeData::Drawing(drawing_object));
+                parent.nth_child_mut(inline_drawing).size = size;
 
-                let mut parent = context.get_node_mut(parent);
-                assert_eq!(parent.size, gui::Size::new(0.0, 0.0));
+                assert_eq!(parent.size, Size::empty());
                 parent.size = size;
             }
 
@@ -181,7 +165,7 @@ fn process_drawing_element(context: &mut Context, parent: NodeReference,
 }
 
 fn process_body_element(context: &mut Context,
-                        parent: NodeReference,
+                        parent: &mut Node,
                         node: &xml::Node,
                         position: Position<f32>) -> Position<f32> {
     let mut position = position;
@@ -196,6 +180,8 @@ fn process_body_element(context: &mut Context,
             _ => ()
         }
 
+        parent.check_last_page_number_from_new_child();
+
         let progress = child_idx as f32 / child_count as f32;
         (context.progress_sender)(progress);
         child_idx += 1;
@@ -204,19 +190,19 @@ fn process_body_element(context: &mut Context,
     position
 }
 
-fn process_break_element(context: &mut Context, parent: NodeReference, line_layout: &mut LineLayout, node: &xml::Node) {
+fn process_break_element(parent: &mut Node, line_layout: &mut LineLayout, node: &xml::Node) {
     let break_type = wp::BreakType::from_string(node.attribute((WORD_PROCESSING_XML_NAMESPACE, "type")));
     match break_type {
         wp::BreakType::Page => {
             line_layout.reset();
 
-            let next_page = context.get_node_mut(parent).page_last + 1;
+            let next_page = parent.page_last + 1;
 
-            let child = wp::create_child(context.document, parent, wp::NodeData::Break);
-            let mut child = context.get_node_mut(child);
+            let child = wp::create_child(parent, wp::NodeData::Break);
+            let mut child = &mut parent.nth_child_mut(child);
             child.page_first = next_page;
             child.position = line_layout.position_on_line;
-            child.set_last_page_number(context.document, next_page);
+            child.page_last = next_page;
         }
         _ => {
             println!("[WP] TODO: unknown break type: \"{:?}\"", break_type);
@@ -225,20 +211,22 @@ fn process_break_element(context: &mut Context, parent: NodeReference, line_layo
 }
 
 fn process_hyperlink_element(context: &mut Context,
-                             parent: NodeReference,
+                             parent: &mut Node,
                              line_layout: &mut wp::layout::LineLayout,
                              node: &xml::Node,
                              mut position: Position<f32>) -> Position<f32> {
-    let hyperlink_ref = wp::append_child(context.document, parent, wp::Node::new(wp::NodeData::Hyperlink(Default::default())));
+    let hyperlink_idx = wp::append_child(parent, wp::Node::new(wp::NodeData::Hyperlink(Default::default())));
+    let hyperlink = &mut parent.nth_child_mut(hyperlink_idx);
 
     for child in node.children() {
         // Text Run
         if child.tag_name().name() == "r" {
-            position = process_text_run_element(context, hyperlink_ref, line_layout, &child, position);
+            position = process_text_run_element(context, hyperlink, line_layout, &child, position);
         }
+
+        hyperlink.update_page_last();
     }
 
-    let mut hyperlink = context.get_node_mut(hyperlink_ref);
     if let Some(relationship_id) = node.attribute((XMLNS_RELATIONSHIPS, "id")) {
         if let Some(relationship) = context.document_relationships.find(relationship_id) {
             if let wp::NodeData::Hyperlink(hyperlink) = &mut hyperlink.data {
@@ -256,15 +244,16 @@ fn process_hyperlink_element(context: &mut Context,
 }
 
 fn process_paragraph_element(context: &mut Context,
-                             parent: NodeReference,
+                             parent: &mut Node,
                              node: &xml::Node,
                              original_position: Position<f32>) -> Position<f32> {
-    let paragraph = wp::append_child(context.document, parent, wp::Node::new(wp::NodeData::Paragraph(wp::Paragraph)));
+    let paragraph_idx = wp::append_child(parent, wp::Node::new(wp::NodeData::Paragraph(wp::Paragraph)));
+    let paragraph = &mut parent.nth_child_mut(paragraph_idx);
 
     //position.x = context.page_settings.margins.left as f32 * TWELFTEENTH_POINT;
     let mut line_layout = wp::layout::LineLayout::new(&context.page_settings, original_position.y());
 
-    context.document.node_arena.get_mut(paragraph).unwrap().position = line_layout.position_on_line;
+    paragraph.position = line_layout.position_on_line;
     let mut position = line_layout.position_on_line;
     //paragraph.borrow_mut().position = position;
 
@@ -277,27 +266,22 @@ fn process_paragraph_element(context: &mut Context,
     }
 
     {
-        let pref = context.document.node_arena.get_mut(paragraph).unwrap();
-        if let Some(numbering) = pref.text_settings.numbering.clone() {
-            drop(pref);
+        if let Some(numbering) = paragraph.text_settings.numbering.clone() {
             let node = numbering.create_node(paragraph, &mut line_layout, context.text_calculator);
-            *position.x_mut() += node.as_ref().borrow().size.width();
+            *position.x_mut() += paragraph.nth_child_mut(node.0).nth_child_mut(node.1).size.width();
             // println!("Numbering Width: {}", node.as_ref().borrow().size.x);
 
 
 
             pub const NUMBERING_INDENTATION: f32 = 700.0 * TWELFTEENTH_POINT;
 
-            let text_settings = context.get_node(paragraph).text_settings;
-            if text_settings.indentation_left.is_some() {
-                *position.x_mut() = text_settings.indent_one(position.x(), true);
+            if paragraph.text_settings.indentation_left.is_some() {
+                *position.x_mut() = paragraph.text_settings.indent_one(position.x(), true);
             } else {
                 *position.x_mut() = (position.x() / NUMBERING_INDENTATION + 1.0).floor() * NUMBERING_INDENTATION;
             }
         }
     }
-
-
 
     for child in node.children() {
         // println!("│  ├─ {}", child.tag_name().name());
@@ -305,19 +289,19 @@ fn process_paragraph_element(context: &mut Context,
         match child.tag_name().name() {
             // 17.16.22 hyperlink (Hyperlink)
             "hyperlink" => {
-                position = process_hyperlink_element(context, &paragraph, &mut line_layout, &child, position);
+                position = process_hyperlink_element(context, paragraph, &mut line_layout, &child, position);
             }
 
             // Text Run
             "r" => {
-                position = process_text_run_element(context, &paragraph, &mut line_layout, &child, position);
+                position = process_text_run_element(context, paragraph, &mut line_layout, &child, position);
             }
 
             _ => ()
         }
-    }
 
-    let mut paragraph = paragraph.borrow_mut();
+        paragraph.update_page_last();
+    }
 
     // let font = context.font_manager.load_font(&paragraph.text_settings);
     // let text = paragraph.text_settings.create_text(&font);
@@ -418,11 +402,8 @@ pub fn process_paragraph_properties_element(numbering_manager: &numbering::Numbe
     }
 }
 
-fn process_paragraph_properties_element_for_paragraph(context: &Context, paragraph: NodeReference, node: &xml::Node) {
-    let mut paragraph = context.get_node_mut(paragraph);
-    let paragraph_text_settings = &mut paragraph.text_settings;
-
-    process_paragraph_properties_element(&context.numbering_manager, context.style_manager, paragraph_text_settings, node);
+fn process_paragraph_properties_element_for_paragraph(context: &Context, paragraph: &mut Node, node: &xml::Node) {
+    process_paragraph_properties_element(&context.numbering_manager, context.style_manager, &mut paragraph.text_settings, node);
 }
 
 // 17.3.1.19 numPr (Numbering Definition Instance Reference)
@@ -459,7 +440,7 @@ fn process_numbering_definition_instance_reference_property(numbering_manager: &
 
 /// Process the <w:docPartObj> element
 /// This element in a child of the <w:sdtPr> elemennt
-fn process_sdt_built_in_doc_part(context: &mut Context, parent: NodeReference, node: &xml::Node) {
+fn process_sdt_built_in_doc_part(context: &mut Context, parent: &mut Node, node: &xml::Node) {
 
     for child in node.children() {
         // println!("│  │  │  ├─ {}", child.tag_name().name());
@@ -472,14 +453,14 @@ fn process_sdt_built_in_doc_part(context: &mut Context, parent: NodeReference, n
 }
 
 /// Process the w:docPartGallery
-fn process_sdt_document_part_gallery_filter(_context: &mut Context, _parent: NodeReference, node: &xml::Node) {
+fn process_sdt_document_part_gallery_filter(_context: &mut Context, _parent: &mut Node, node: &xml::Node) {
     for _attr in node.attributes() {
         // println!("│  │  │  │  ├─ Attribute \"{}\" => \"{}\"   in namespace \"{}\"", attr.name(), attr.value(), attr.namespace().unwrap_or(""));
     }
 }
 
 /// Process the <w:sdtPr> element
-fn process_std_properties(context: &mut Context, parent: NodeReference, node: &xml::Node) {
+fn process_std_properties(context: &mut Context, parent: &mut Node, node: &xml::Node) {
     for child in node.children() {
         // println!("│  │  ├─ {}", child.tag_name().name());
 
@@ -491,14 +472,14 @@ fn process_std_properties(context: &mut Context, parent: NodeReference, node: &x
 }
 
 /// Process the <w:sdtEndPr> element
-fn process_sdt_end_character_properties(_context: &mut Context, _parent: NodeReference, node: &xml::Node) {
+fn process_sdt_end_character_properties(_context: &mut Context, _parent: &mut Node, node: &xml::Node) {
     for _child in node.children() {
         // println!("│  │  ├─ {}", child.tag_name().name());
     }
 }
 
 /// Process the <w:sdtContent> element
-fn process_sdt_content(context: &mut Context, parent: NodeReference, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
+fn process_sdt_content(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
     let mut position = original_position;
 
     for child in node.children() {
@@ -515,12 +496,13 @@ fn process_sdt_content(context: &mut Context, parent: NodeReference, node: &xml:
 /// Process the <w:sdt> element
 /// 17.5.2 Structured Document Tags
 fn process_structured_document_tag(context: &mut Context,
-                                   parent: NodeReference,
+                                   parent: &mut Node,
                                    node: &xml::Node,
                                    original_position: Position<f32>) -> Position<f32> {
     let mut position = original_position;
 
-    let sdt = wp::append_child(context.document, parent, wp::Node::new(wp::NodeData::StructuredDocumentTag(Default::default())));
+    let sdt = wp::append_child(parent, wp::Node::new(wp::NodeData::StructuredDocumentTag(Default::default())));
+    let sdt = parent.nth_child_mut(sdt);
 
     for child in node.children() {
         // println!("│  ├─ {}", child.tag_name().name());
@@ -531,6 +513,8 @@ fn process_structured_document_tag(context: &mut Context,
             "sdtPr" => process_std_properties(context, sdt, &child),
             _ => panic!("Illegal <w:sdt> child named: \"{}\" in namespace \"{}\"", child.tag_name().name(), child.tag_name().namespace().unwrap_or(""))
         }
+
+        sdt.check_last_page_number_from_new_child();
     }
 
     position
@@ -538,59 +522,48 @@ fn process_structured_document_tag(context: &mut Context,
 
 /// Process the w:t element.
 fn process_text_element(context: &mut Context,
-                        parent: NodeReference,
+                        instruction: &Option<instructions::Field>,
+                        parent_text_run: &mut Node,
                         line_layout: &mut wp::layout::LineLayout,
                         node: &xml::Node,
                         position: Position<f32>) -> Position<f32> {
     let mut position = position;
 
-    let instruction = (|| {
-        let text_run_borrow = parent.as_ref().borrow();
-        let parent = text_run_borrow.parent.upgrade().unwrap();
-        let parent_borrow = parent.as_ref().borrow();
-
-        for child in parent_borrow.children.as_ref().unwrap() {
-            let child = child.as_ref().borrow();
-            match &child.data {
-                crate::wp::NodeData::TextRun(run) => if let Some(instruction) = &run.instruction {
-                    return Some(instruction.clone());
-                }
-                _ => ()
-            }
-        }
-
-        None
-    })();
-
     if let Some(field) = instruction {
-        return process_text_element_in_instructed_field(context, parent, line_layout, position, &field);
+        return process_text_element_in_instructed_field(context, parent_text_run, line_layout, position, &field);
     }
 
-    let text_node = wp::append_child(&parent, wp::Node::new(wp::NodeData::Text()));
+    let text_node = wp::append_child(parent_text_run, wp::Node::new(wp::NodeData::Text));
+    let text_node = parent_text_run.nth_child_mut(text_node);
 
     for child in node.children() {
         if child.node_type() == xml::NodeType::Text {
             let text_string = child.text().unwrap();
             // println!("│  │  │  ├─ Text: \"{}\"", text_string);
-            position = process_text_element_text(&text_node, line_layout, context.text_calculator, text_string, position);
+            position = process_text_element_text(text_node, line_layout, context.text_calculator, text_string, position);
         }
     }
+
+    let last_page = text_node.page_last;
+    drop(text_node);
+    parent_text_run.propose_last_page_number(last_page);
 
     position
 }
 
 fn process_text_element_in_instructed_field(context: &mut Context,
-        parent: NodeReference, line_layout: &mut LineLayout,
+        parent: &mut Node, line_layout: &mut LineLayout,
         _position: Position<f32>, field: &wp::instructions::Field) -> Position<f32> {
-    append_text_element(&field.resolve_to_string(&parent), &parent, line_layout, context.text_calculator)
+    let field_resolved_for_display = field.resolve_to_string(context.document);
+    append_text_element(&field_resolved_for_display, parent, line_layout, context.text_calculator)
 }
 
-pub fn append_text_element(text_string: &str, parent: NodeReference, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator) -> Position<f32> {
+pub fn append_text_element(text_string: &str, parent: &mut Node, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator) -> Position<f32> {
     let position = line_layout.position_on_line;
     process_text_element_text(parent, line_layout, text_calculator, text_string, position)
 }
 
-pub fn process_text_element_text(parent: NodeReference, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator, text_string: &str, original_position: Position<f32>) -> Position<f32> {
+pub fn process_text_element_text(parent: &mut Node, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator, text_string: &str, original_position: Position<f32>) -> Position<f32> {
     #[derive(Debug)]
     enum LineStopReason {
         /// The end of the text was reached. This could also very well mean the
@@ -609,9 +582,9 @@ pub fn process_text_element_text(parent: NodeReference, line_layout: &mut wp::la
 
     let mut previous_stop_reason = None;
 
-    let mut page_number = parent.as_ref().borrow().page_last;
+    let mut page_number = parent.page_last;
+    let text_settings = parent.text_settings.clone();
 
-    let text_settings = parent.borrow().text_settings.clone();
     let family_name = match &text_settings.font {
         None => "Calibri",
         Some(font) => font,
@@ -647,7 +620,7 @@ pub fn process_text_element_text(parent: NodeReference, line_layout: &mut wp::la
 
             if position.y() > line_layout.page_vertical_end {
                 page_number += 1;
-                parent.borrow_mut().set_last_page_number(page_number);
+                parent.page_last = page_number;
                 *position.y_mut() = line_layout.page_vertical_start;
                 line_layout.reset();
             }
@@ -702,8 +675,8 @@ pub fn process_text_element_text(parent: NodeReference, line_layout: &mut wp::la
             println!("│  │  │  │  ├─ Calculation: x={} w={} m={}", position.x, width, max_width_fitting_on_page);
         }
 
-        let text_part_ref = wp::append_child(&parent, wp::Node::new(wp::NodeData::TextPart(wp::TextPart{ text: String::from(line) })));
-        let mut text_part = text_part_ref.borrow_mut();
+        let text_part_idx = wp::append_child(parent, wp::Node::new(wp::NodeData::TextPart(wp::TextPart{ text: String::from(line) })));
+        let mut text_part = parent.nth_child_mut(text_part_idx);
         text_part.page_first = page_number;
         text_part.page_last = page_number;
         text_part.size = text_calculator.calculate_text_size(font_spec, line).unwrap();
@@ -733,37 +706,51 @@ pub fn process_text_element_text(parent: NodeReference, line_layout: &mut wp::la
 /// This element specifies a run of content in the parent field, hyperlink,
 /// custom XML element, structured document tag, smart tag, or paragraph.
 fn process_text_run_element(context: &mut Context,
-                            parent: NodeReference,
+                            parent: &mut Node,
                             line_layout: &mut wp::layout::LineLayout,
                             node: &xml::Node,
                             position: Position<f32>) -> Position<f32> {
     let mut position = position;
 
+    let instruction = (|| {
+        for child in parent.children.as_ref().unwrap() {
+            match &child.data {
+                crate::wp::NodeData::TextRun(run) => if let Some(instruction) = &run.instruction {
+                    return Some(instruction.clone());
+                }
+                _ => ()
+            }
+        }
+
+        None
+    })();
+
     let text_run = wp::append_child(parent, wp::Node::new(wp::NodeData::TextRun(Default::default())));
+    let text_run = parent.nth_child_mut(text_run);
 
     for text_run_property in node.children() {
         match text_run_property.tag_name().name() {
             // 17.3.3.1 br (Break)
             "br" => {
-                process_break_element(&text_run, line_layout, &text_run_property);
+                process_break_element(text_run, line_layout, &text_run_property);
 
                 // TODO: phase out the following code when the `position`
                 //       parameters are fully replaced by the LineLayout
                 //       system.
-                if let Some(children) = &text_run.borrow().children {
+                if let Some(children) = &text_run.children {
                     if let Some(child) = children.last() {
-                        position = child.borrow().position;
+                        position = child.position;
                     }
                 }
                 // End TODO
             }
 
             "drawing" => {
-                position = process_drawing_element(context, &text_run, &text_run_property, position);
+                position = process_drawing_element(context, text_run, &text_run_property, position);
             }
 
             "instrText" => {
-                if let crate::wp::NodeData::TextRun(run) = &mut text_run.borrow_mut().data {
+                if let crate::wp::NodeData::TextRun(run) = &mut text_run.data {
                     for child in node.children() {
                         if let Some(text) = child.text() {
                             run.instruction = Some(crate::wp::instructions::Field::parse(text));
@@ -774,16 +761,22 @@ fn process_text_run_element(context: &mut Context,
             }
 
             "rPr" =>  {
-                text_run.borrow_mut().text_settings.apply_run_properties_element(context.style_manager, &text_run_property);
+                text_run.text_settings.apply_run_properties_element(context.style_manager, &text_run_property);
             }
 
             "t" => {
-                position = process_text_element(context, &text_run, line_layout, &text_run_property, position);
+                position = process_text_element(context, &instruction, text_run, line_layout, &text_run_property, position);
             }
 
             _ => ()
         }
+
+        text_run.check_last_page_number_from_new_child();
     }
+
+    let last_page = text_run.page_last;
+    drop(text_run);
+    parent.propose_last_page_number(last_page);
 
     position
 }

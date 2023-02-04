@@ -1,11 +1,6 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::{
-    rc::Rc,
-    cell::RefCell,
-};
-
 use roxmltree as xml;
 
 use uffice_lib::{profiling::Profiler, profile_expr};
@@ -15,6 +10,8 @@ use crate::{
     wp::{
         self,
         numbering::NumberingManager,
+        Document,
+        Node,
     },
     word_processing::{
         DocumentResult,
@@ -43,7 +40,8 @@ pub struct DocumentView {
     #[allow(dead_code)]
     view_data: ViewData,
 
-    document: Option<Rc<RefCell<crate::wp::Node>>>,
+    document: Option<Document>,
+    root_node: Option<Node>,
 
     page_rects: Vec<Rect<f32>>,
 }
@@ -106,25 +104,17 @@ fn draw_document(archive_path: &str, text_calculator: &mut dyn TextCalculator, p
     let document = xml::Document::parse(&document_text)
             .expect("Failed to parse document");
 
-    let result = word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager, document_properties, text_calculator, progress_sender);
-    .apply_recursively(&|node, depth| {
-        println!("{}({}, {}) sized ({} x {}) => {:?}", " ".repeat(depth * 4),
-                node.position.x(),
-                node.position.y(),
-                node.size.width(),
-                node.size.height(),
-                node.data
-        );
-    }, 0);
-    result
+    word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager, document_properties, text_calculator, progress_sender)
 }
 
 impl DocumentView {
     pub fn new(archive_path: &str, text_calculator: &mut dyn TextCalculator, progress_sender: &dyn Fn(f32)) -> Self {
+        let result = draw_document(archive_path, text_calculator, progress_sender);
         Self {
             view_data: ViewData {  },
             page_rects: Vec::new(),
-            document: Some(draw_document(archive_path, text_calculator, progress_sender)),
+            document: Some(result.document),
+            root_node: Some(result.root_node),
         }
     }
 
@@ -134,26 +124,17 @@ impl DocumentView {
     fn paint(&mut self, event: &mut super::PaintEvent) {
         let max_y = event.content_rect.bottom;
 
-        if let Some(document) = &self.document {
-            let (first_page, last_page, page_settings) = {
-                let doc = document.as_ref().borrow();
+        if let Some(document) = &mut self.document {
+            let root_node = self.root_node.as_mut().unwrap();
 
-                (doc.page_first, doc.page_last, match &doc.data {
-                    crate::wp::NodeData::Document(d) => {
-                        d.page_settings
-                    }
-                    _ => panic!("Invalid document Node: {:?}", document),
-                })
-            };
-
-            let page_width = page_settings.size.width.get_pts() * event.zoom;
-            let page_height = page_settings.size.height.get_pts() * event.zoom;
+            let page_width = document.page_settings.size.width.get_pts() * event.zoom;
+            let page_height = document.page_settings.size.height.get_pts() * event.zoom;
             let page_size = Size::new(page_width, page_height);
             let start_x = event.content_rect.left + (event.content_rect.width() as f32 - page_width) / 2.0;
 
             self.page_rects.clear();
-            let start_y_pages = (first_page..(last_page + 1)).map(|index| {
-                let page_size_and_margin = VERTICAL_PAGE_GAP + page_settings.size.height().get_pts() * event.zoom;
+            let start_y_pages = (root_node.page_first..(root_node.page_last + 1)).map(|index| {
+                let page_size_and_margin = VERTICAL_PAGE_GAP + document.page_settings.size.height().get_pts() * event.zoom;
                 let start_y = event.content_rect.top + event.start_y + VERTICAL_PAGE_MARGIN * event.zoom + index as f32 * page_size_and_margin;
 
                 if start_y < max_y {
@@ -173,7 +154,7 @@ impl DocumentView {
 
             let mut previous_page = None;
 
-            document.borrow_mut().apply_recursively_mut(&mut |node, _depth| {
+            root_node.apply_recursively_mut(&mut |node, _depth| {
                 let start_y = start_y_pages[node.page_first];
 
                 if start_y > max_y {
@@ -216,14 +197,6 @@ impl DocumentView {
     }
 
     fn on_mouse_moved(&mut self, mouse_position: Position<f32>, new_cursor: &mut Option<CursorIcon>) {
-        let Some(document) = &mut self.document else {
-            return;
-        };
-
-        document.borrow_mut().apply_recursively(&mut |node, _depth| {
-            node.interaction_states.hover = wp::HoverState::NotHoveringOn;
-        }, 0);
-
         self.check_interactable_for_mouse(mouse_position, &mut |node, position| {
             node.interaction_states.hover = wp::HoverState::HoveringOver;
 
@@ -249,31 +222,38 @@ impl super::ViewImpl for DocumentView {
         }
     }
 
-    fn check_interactable_for_mouse(&self, mouse_position: Position<f32>, callback: &mut dyn FnMut(&mut crate::wp::Node, Position<f32>)) -> bool {
+    fn check_interactable_for_mouse(&mut self, mouse_position: Position<f32>, callback: &mut dyn FnMut(&mut crate::wp::Node, Position<f32>)) -> bool {
         // TODO: check if the mouse is inside the bounds of a page.
 
-        let doc = self.document.as_ref().unwrap();
-        let mut document = doc.borrow_mut();
-
         let mouse_position = Position::new(mouse_position.x, mouse_position.y);
-        document.hit_test(mouse_position, &mut |node| {
-            callback(node, mouse_position);
-        })
+
+        // for (_, node) in self.document.as_mut().unwrap().node_arena.iter_mut() {
+        //     if let NodeData::TextPart(..) = &node.data {
+        //         let node_rect = Rect::from_position_and_size(node.position, node.size);
+
+        //         if node_rect.is_inside_inclusive(mouse_position) {
+        //             callback(node, mouse_position);
+        //             return true;
+        //         }
+        //     }
+        // }
+
+        false
     }
 
-    fn dump_dom_tree(&self) {
-        match &self.document {
-            Some(document) => {
-                document.borrow_mut().apply_recursively(&|node, depth| {
-                    print!("🌲: {}{:?}", "    ".repeat(depth), node.data);
-                    print!(" @ ({}, {})", node.position.x, node.position.y,);
-                    print!(" sized ({}x{})", node.size.width(), node.size.height());
+    fn dump_dom_tree(&mut self) {
+        let Some(root_node) = self.root_node.as_mut() else {
+            println!("🌲: No tree");
+            return;
+        };
 
-                    println!();
-                }, 0);
-            }
-            None => println!("🌲: No tree"),
-        }
+        root_node.apply_recursively(&|node, depth| {
+            print!("🌲: {}{:?}", "    ".repeat(depth), node.data);
+            print!(" @ ({}, {})", node.position.x, node.position.y,);
+            print!(" sized ({}x{})", node.size.width(), node.size.height());
+
+            println!();
+        }, 0);
     }
 
     fn handle_event(&mut self, event: &mut super::Event) {

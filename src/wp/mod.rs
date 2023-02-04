@@ -7,7 +7,7 @@ pub mod layout;
 pub mod numbering;
 
 use std::{
-    rc::{Rc},
+    rc::Rc,
     cell::RefCell,
 };
 
@@ -43,7 +43,7 @@ pub enum NodeData {
     NumberingParent,
     Paragraph(Paragraph),
     StructuredDocumentTag(StructuredDocumentTag),
-    Text(),
+    Text,
     TextPart(TextPart),
     TextRun(TextRun),
 }
@@ -73,15 +73,10 @@ impl Default for InteractionStates {
     }
 }
 
-pub type NodeReference = thunderdome::Index;
-
 #[derive(Debug)]
 pub struct Node {
-
-    pub parent: Option<NodeReference>,
-
     /// Can be None when this element isn't allowed to have children
-    pub children: Option<Vec<NodeReference>>,
+    pub children: Option<Vec<Node>>,
     pub data: NodeData,
 
     /// The page number this node is starting on.
@@ -103,7 +98,6 @@ pub struct Node {
 impl Node {
     pub fn new(data: NodeData) -> Self {
         Self {
-            parent: None,
             children: Some(vec![]),
 
             data,
@@ -115,33 +109,32 @@ impl Node {
             interaction_states: Default::default(),
         }
     }
-
     /// Run the `callback` function recursively on itself and it's descendants.
-    pub fn apply_recursively(&mut self, document: &mut Document, callback: &dyn Fn(&mut Node, usize), depth: usize) {
+    pub fn apply_recursively(&mut self, callback: &dyn Fn(&mut Node, usize), depth: usize) {
         callback(self, depth);
 
         if let Some(children) = &mut self.children {
             for child in children {
-                document.node_arena.get_mut(*child).unwrap().apply_recursively(document, callback, depth + 1);
+                child.apply_recursively(callback, depth + 1);
             }
         }
     }
 
     /// Run the `callback` function recursively on itself and it's descendants.
-    pub fn apply_recursively_mut(&mut self, document: &mut Document, callback: &mut dyn FnMut(&mut Node, usize), depth: usize) {
+    pub fn apply_recursively_mut(&mut self, callback: &mut dyn FnMut(&mut Node, usize), depth: usize) {
         callback(self, depth);
 
         if let Some(children) = &mut self.children {
             for child in children {
-                document.node_arena.get_mut(*child).unwrap().apply_recursively_mut(document, callback, depth + 1);
+                child.apply_recursively_mut(callback, depth + 1);
             }
         }
     }
 
-    pub fn on_event(&mut self, document: &mut Document, event: &mut Event) {
+    pub fn on_event(&mut self, event: &mut Event) {
         if let Some(children) = &mut self.children {
             for child in children {
-                document.node_arena.get_mut(*child).unwrap().on_event(document, event);
+                child.on_event(event);
             }
         }
 
@@ -153,10 +146,10 @@ impl Node {
     /// Returns the hit test result.
     ///
     /// If Some, the vector contains the innermost to outermost nodes that were in the hit path.
-    pub fn hit_test(&mut self, document: &mut Document, position: Position<f32>, callback: &mut dyn FnMut(&mut Node)) -> bool {
-        if let Some(children) = &mut self.children {
+    pub fn hit_test(&self, position: Position<f32>, callback: &mut dyn FnMut(&Node)) -> bool {
+        if let Some(children) = &self.children {
             for child in children {
-                if document.node_arena.get_mut(*child).unwrap().hit_test(document, position, callback) {
+                if child.hit_test(position, callback) {
                     callback(self);
                     return true;
                 }
@@ -177,49 +170,59 @@ impl Node {
         false
     }
 
-    /// Sets the last page number of this Node and all it's parents.
-    pub fn set_last_page_number(&mut self, document: &mut Document, page_number: usize) {
-        assert!(self.page_last <= page_number);
-        self.page_last = page_number;
+    pub fn nth_child_mut(&mut self, index: usize) -> &mut Node {
+        &mut self.children.as_mut().unwrap()[index]
+    }
 
-        if let Some(parent) = self.parent {
-            document.node_arena.get_mut(parent).unwrap().set_last_page_number(document, page_number);
-        } else {
-            assert!(matches!(self.data, NodeData::Document));
+    pub fn update_page_last(&mut self) -> usize {
+        let mut last_page = self.page_last;
+        if let Some(children) = &mut self.children {
+            for child in children {
+                let child_last_page = child.update_page_last();
+                if last_page < child_last_page {
+                    last_page = child_last_page;
+                }
+            }
         }
+
+        self.propose_last_page_number(last_page);
+
+        last_page
+    }
+
+    pub fn propose_last_page_number(&mut self, last_page: usize) {
+        if self.page_last < last_page {
+            self.page_last = last_page;
+        }
+    }
+
+    pub fn check_last_page_number_from_new_child(&mut self) {
+        let mut last_page = self.page_last;
+        if let Some(children) = &self.children {
+            if let Some(last) = children.last() {
+                last_page = last.page_last;
+            }
+        }
+        self.propose_last_page_number(last_page);
     }
 }
 
-pub fn append_child<'b>(document: &mut Document, parent: NodeReference, mut node: Node) -> NodeReference {
-    node.parent = Some(parent);
+pub fn append_child(parent: &mut Node, mut node: Node) -> usize {
+    node.text_settings = parent.text_settings.clone();
+    node.page_first = parent.page_last;
+    node.page_last = parent.page_last;
+    node.position = parent.position;
 
-    if let Some(parent) = document.node_arena.get(parent) {
-        node.text_settings = parent.text_settings.clone();
-        node.page_first = parent.page_last;
-        node.page_last = parent.page_last;
-        node.position = parent.position;
+    if let Some(children) = &mut parent.children {
+        children.push(node);
+        return children.len() - 1;
     }
 
-    let node = document.node_arena.insert(node);
-
-    if let Some(parent) = document.node_arena.get_mut(parent) {
-        if let Some(children) = &mut parent.children {
-            children.push(node);
-            return node;
-        }
-
-        panic!("Node isn't allowed to have children: {:?}", parent.data);
-    } else {
-        panic!("Parent reference is invalid: {:?}", parent);
-    }
-
-    // document.node_arena.remove(node);
+    panic!("Node isn't allowed to have children: {:?}", parent.data);
 }
 
-pub fn create_child(document: &mut Document, parent_ref: NodeReference, data: NodeData) -> NodeReference {
-    let parent = document.node_arena.get(parent_ref).unwrap();
+pub fn create_child<'b>(parent: &mut Node, data: NodeData) -> usize {
     let node = Node {
-        parent: Some(parent_ref),
         children: Some(Vec::new()),
         data,
         page_first: parent.page_last,
@@ -229,18 +232,8 @@ pub fn create_child(document: &mut Document, parent_ref: NodeReference, data: No
         size: Default::default(),
         interaction_states: Default::default(),
     };
-    drop(parent);
 
-    let node = document.node_arena.insert(node);
-
-    if let Some(parent) = document.node_arena.get_mut(node) {
-        if let Some(children) = &mut parent.children {
-            children.push(node);
-            return children.last_mut().unwrap().clone();
-        }
-    }
-
-    panic!("Node isn't allowed to have children: {:?}", parent.data);
+    append_child(parent, node)
 }
 
 impl Document {
@@ -277,25 +270,8 @@ pub struct Paragraph;
 
 #[derive(Debug)]
 pub struct Document {
-    pub node_arena: thunderdome::Arena<Node>,
     pub page_settings: PageSettings,
     pub document_properties: document_properties::DocumentProperties,
-}
-
-impl Document {
-    pub fn set_last_page_number(&mut self, mut node_ref: NodeReference, page_number: usize) {
-        while let Some(node) = self.node_arena.get(node_ref) {
-            if node.page_last < page_number {
-                node.page_last = page_number;
-            }
-
-            if let Some(parent) = node.parent {
-                node_ref = parent;
-            } else {
-                return;
-            }
-        }
-    }
 }
 
 #[derive(Debug)]
