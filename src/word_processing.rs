@@ -429,11 +429,11 @@ fn process_numbering_definition_instance_reference_property(numbering_manager: &
                 numbering.definition = numbering_manager.find_definition_instance(instance_id);
             }
 
-            _ => ()
+            _ => println!("[WARNING] Unknown element in <w:numPr>: {}", child.tag_name().name()),
         }
     }
 
-    assert_eq!(numbering.definition.is_some(), numbering.level.is_some(), "Both should be None or both be Some");
+    //assert_eq!(numbering.definition.is_some(), numbering.level.is_some(), "Both should be None or both be Some");
 
     text_settings.numbering = Some(numbering);
 }

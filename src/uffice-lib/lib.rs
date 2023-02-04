@@ -64,3 +64,10 @@ impl TwelfteenthPoint<u32> {
         self.0 as f32 / 12.0
     }
 }
+
+impl TwelfteenthPoint<i32> {
+    /// Get the value in points.
+    pub fn get_pts(&self) -> f32 {
+        self.0 as f32 / 12.0
+    }
+}

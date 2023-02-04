@@ -111,10 +111,10 @@ pub struct TextSettings {
     /// Specifies the indentation which shall be removed from the first line of
     /// the parent paragraph, by moving the indentation on the first line back
     /// towards the beginning of the direction of text flow.
-    pub indentation_hanging: Option<TwelfteenthPoint<u32>>,
+    pub indentation_hanging: Option<TwelfteenthPoint<i32>>,
 
     ///
-    pub indentation_left: Option<TwelfteenthPoint<u32>>,
+    pub indentation_left: Option<TwelfteenthPoint<i32>>,
 }
 
 fn inherit_or_original<T: Clone + std::fmt::Debug>(inherit: &Option<T>, original: &mut Option<T>) {
