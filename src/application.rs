@@ -208,9 +208,9 @@ impl Tab {
             for event in tab_event_receiver {
                 match event {
                     TabEvent::Layout { painter } => {
-                        if view.is_some() {
-                            continue;
-                        }
+                        // if view.is_some() {
+                        //     continue;
+                        // }
 
                         let text_calculator = {
                             let painter = &mut *painter.as_ref().borrow_mut();
@@ -383,6 +383,11 @@ impl Tab {
 
     pub fn on_window_focus_lost(&mut self) {
         self.scroller.on_window_focus_lost();
+    }
+
+    fn reload(&mut self) {
+        assert!(self.state == TabState::Ready);
+        self.state = TabState::Loading;
     }
 }
 
@@ -606,6 +611,14 @@ impl App {
             VirtualKeyCode::Key7 => self.check_key_digit(7, window),
             VirtualKeyCode::Key8 => self.check_key_digit(8, window),
             VirtualKeyCode::Key9 => self.check_key_digit(9, window),
+
+            VirtualKeyCode::F5 => {
+                if let Some(tab_id) = self.current_visible_tab {
+                    let tab = self.tabs.get_mut(&tab_id).unwrap();
+                    tab.reload();
+                    _ = self.event_loop_proxy.send_event(AppEvent::PainterRequest);
+                }
+            }
 
             #[cfg(debug_assertions)]
             VirtualKeyCode::F9 => window.request_redraw(),
