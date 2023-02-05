@@ -177,6 +177,7 @@ fn process_body_element(context: &mut Context,
         match child.tag_name().name() {
             "p" => position = process_paragraph_element(context, parent, &child, position),
             "sdt" => position = process_structured_document_tag_block_level(context, parent, &child, position),
+            "tbl" => position = process_table_element(context, parent, &child, position),
             _ => ()
         }
 
@@ -460,8 +461,8 @@ fn process_sdt_built_in_doc_part(context: &mut Context, parent: &mut Node, node:
 
 /// Process the w:docPartGallery
 fn process_sdt_document_part_gallery_filter(_context: &mut Context, _parent: &mut Node, node: &xml::Node) {
-    for _attr in node.attributes() {
-        // println!("│  │  │  │  ├─ Attribute \"{}\" => \"{}\"   in namespace \"{}\"", attr.name(), attr.value(), attr.namespace().unwrap_or(""));
+    for attr in node.attributes() {
+        println!("│  │  │  │  ├─ Attribute \"{}\" => \"{}\"   in namespace \"{}\"", attr.name(), attr.value(), attr.namespace().unwrap_or(""));
     }
 }
 
@@ -507,6 +508,7 @@ fn process_sdt_content_non_block_level(context: &mut Context, parent: &mut Node,
     for child in node.children() {
         match child.tag_name().name() {
             "r" => position = process_text_run_element(context, parent, line_layout, &child, position),
+            "p" => position = process_paragraph_element(context, parent, &child, position),
             _ => {
                 #[cfg(debug_assertions)]
                 println!("[WARNING] Unknown element in <w:sdtContent> (non-block): {}", child.tag_name().name());
@@ -578,6 +580,75 @@ fn process_structured_document_tag_non_block_level(context: &mut Context,
         }
 
         sdt.check_last_page_number_from_new_child();
+    }
+
+    position
+}
+
+/// Processt the `<w:tbl>` element.
+fn process_table_element(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
+    let mut position = original_position;
+
+    let table = wp::append_child(parent, wp::Node::new(wp::NodeData::Table));
+    let table = parent.nth_child_mut(table);
+
+    for child in node.children() {
+        match child.tag_name().name() {
+            "tblPr" => (), // TODO
+            "tblGrid" => (), // TODO
+            "tr" => position = process_table_row_element(context, table, &child, position),
+            _ => {
+                #[cfg(debug_assertions)]
+                println!("[WARNING] Unknown element in <w:tbl>: {}", child.tag_name().name());
+            }
+        }
+    }
+
+    position
+}
+
+/// Process the `<w:tr>` element.
+fn process_table_row_element(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
+    let mut position = original_position;
+
+    let table_row = wp::append_child(parent, wp::Node::new(wp::NodeData::TableRow));
+    let table_row = parent.nth_child_mut(table_row);
+
+    for child in node.children() {
+
+        match child.tag_name().name() {
+            "trPr" => (), // TODO
+            "tc" => position = process_table_cell_element(context, table_row, &child, position),
+            _ => {
+                #[cfg(debug_assertions)]
+                println!("[WARNING] Unknown element in <w:tr>: {}", child.tag_name().name());
+            }
+        }
+    }
+
+    position
+}
+
+/// Process the `<w:tc>` element.
+fn process_table_cell_element(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
+    let mut position = original_position;
+
+    let table_cell = wp::append_child(parent, wp::Node::new(wp::NodeData::TableCell));
+    let table_cell = parent.nth_child_mut(table_cell);
+
+    for child in node.children() {
+        match child.tag_name().name() {
+            "tcPr" => (), // TODO
+            "p" => position = process_paragraph_element(context, table_cell, &child, position),
+            "sdt" => {
+                let mut line_layout = wp::layout::LineLayout::new(&context.page_settings, position.y());
+                position = process_structured_document_tag_non_block_level(context, table_cell, &child, position, StructuredDocumentTagLevel::Cell, &mut line_layout);
+            }
+            _ => {
+                #[cfg(debug_assertions)]
+                println!("[WARNING] Unknown element in <w:tc>: {}", child.tag_name().name());
+            }
+        }
     }
 
     position
