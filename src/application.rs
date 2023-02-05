@@ -175,6 +175,8 @@ pub struct Tab {
 
     /// How much of the document is loaded, between 0.0 and 1.0.
     loading_progress: f32,
+    /// How many pages were painted.
+    page_count: usize,
 }
 
 impl Tab {
@@ -245,7 +247,8 @@ impl Tab {
 
                             proxy.send_event(AppEvent::TabPainted{
                                 tab_id: id,
-                                total_content_height: view.calculate_content_height()
+                                total_content_height: view.calculate_content_height(),
+                                page_count: view.page_count().unwrap_or(0),
                             }).unwrap();
 
                             content_height = view.calculate_content_height();
@@ -275,6 +278,7 @@ impl Tab {
             tab_event_sender,
             finished_paint_receiver,
             loading_progress: 0.0,
+            page_count: 0,
         }
     }
 
@@ -282,8 +286,9 @@ impl Tab {
         self.state = TabState::Ready;
     }
 
-    pub fn on_tab_painted(&mut self, total_content_height: f32) {
+    pub fn on_tab_painted(&mut self, total_content_height: f32, page_count: usize) {
         self.scroller.content_height = total_content_height;
+        self.page_count = page_count;
     }
 
     pub fn on_tab_progressed(&mut self, progress: f32) {
@@ -528,9 +533,9 @@ impl App {
                 }
             }
 
-            AppEvent::TabPainted { tab_id, total_content_height } => {
+            AppEvent::TabPainted { tab_id, total_content_height, page_count } => {
                 if let Some(tab) = self.tabs.get_mut(&tab_id) {
-                    tab.on_tab_painted(total_content_height);
+                    tab.on_tab_painted(total_content_height, page_count);
                 } else {
                     println!("[App] Warning: TabPainted: Tab not found/closed.");
                 }
@@ -684,7 +689,7 @@ impl App {
         painter.paint_rect(Brush::SolidColor(Color::from_rgb(0x22, 0x22, 0x22)),
                 Rect::from_position_and_size(position, size));
 
-        let text = format!("1238 words,  {}% zoom", tab.zoomer.zoom_factor_unanimated() * 100.0);
+        let text = format!("1238 words,  {} pages,   {}% zoom", tab.page_count, tab.zoomer.zoom_factor_unanimated() * 100.0);
 
         painter.select_font(FontSpecification::new("Segoe UI", 8.0, FontWeight::Regular)).unwrap();
         painter.paint_text(Brush::SolidColor(Color::from_rgb(0xCC, 0xCC, 0xCC)), Position::new(padding, position.y()), &text, None);

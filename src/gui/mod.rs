@@ -316,6 +316,9 @@ pub enum AppEvent {
 
         /// The total height of the content in pixels.
         total_content_height: f32,
+
+        /// How many pages were painted.
+        page_count: usize,
     },
 
     /// A certain tab has progressed in loading.

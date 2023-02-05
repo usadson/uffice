@@ -263,4 +263,12 @@ impl super::ViewImpl for DocumentView {
                 self.on_mouse_moved(*mouse_position, *new_cursor),
         }
     }
+
+    fn page_count(&self) -> Option<usize> {
+        if let Some(node) = &self.root_node {
+            Some(node.page_last)
+        } else {
+            None
+        }
+    }
 }

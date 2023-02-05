@@ -60,6 +60,8 @@ pub trait ViewImpl {
     fn dump_dom_tree(&mut self);
 
     fn handle_event(&mut self, event: &mut Event);
+
+    fn page_count(&self) -> Option<usize>;
 }
 
 #[derive(Debug)]
