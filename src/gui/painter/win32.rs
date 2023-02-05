@@ -196,17 +196,19 @@ impl<T> SelectOption<T> {
 struct CachedFont {
     parent: Rc<RefCell<CachedFontFamily>>,
     format: mltg::TextFormat,
+
+    text_layouts: HashMap<String, mltg::TextLayout>,
 }
 
 struct CachedFontFamily {
-    types: HashMap<FontVariantCacheKey, Rc<CachedFont>>,
+    types: HashMap<FontVariantCacheKey, Rc<RefCell<CachedFont>>>,
 }
 
 struct Win32PainterCache {
     #[allow(dead_code)]
     sources: Rc<RefCell<SharedCacheSources>>,
 
-    font_families: HashMap<String, Rc<RefCell<CachedFontFamily>>>,
+    font_families: HashMap<Rc<str>, Rc<RefCell<CachedFontFamily>>>,
 }
 
 fn load_font(sources: &Rc<RefCell<SharedCacheSources>>, factory: &mltg::Factory, font: super::FontSpecification) -> Result<(mltg::TextStyle, mltg::TextFormat), super::FontSelectionError> {
@@ -256,16 +258,17 @@ fn load_font(sources: &Rc<RefCell<SharedCacheSources>>, factory: &mltg::Factory,
 }
 
 impl Win32PainterCache {
-    pub fn insert_font(&mut self, font_spec: super::FontSpecification, font: (mltg::TextStyle, mltg::TextFormat)) -> Rc<CachedFont> {
+    pub fn insert_font(&mut self, font_spec: super::FontSpecification, font: (mltg::TextStyle, mltg::TextFormat)) -> Rc<RefCell<CachedFont>> {
         let (_style, format) = font;
-        match self.font_families.entry(String::from(font_spec.family_name)) {
+        match self.font_families.entry(Rc::from(font_spec.family_name)) {
             Entry::Occupied(o) => {
                 let family = o.get().clone();
                 let mut family = family.borrow_mut();
-                let cached_font = Rc::new(CachedFont {
+                let cached_font = Rc::new(RefCell::new(CachedFont {
                     parent: o.get().clone(),
-                    format
-                });
+                    format,
+                    text_layouts: HashMap::new(),
+                }));
 
                 family.types.insert(font_spec.into(), cached_font.clone());
                 cached_font
@@ -277,7 +280,7 @@ impl Win32PainterCache {
                     }
                 ));
 
-                let cached_font = Rc::new(CachedFont { parent: family.clone(), format });
+                let cached_font = Rc::new(RefCell::new(CachedFont { parent: family.clone(), format, text_layouts: HashMap::new() }));
                 let previous = family.borrow_mut().types.insert(font_spec.into(), cached_font.clone());
                 assert!(previous.is_none(), "Loaded a new font for nothing!");
 
@@ -288,7 +291,7 @@ impl Win32PainterCache {
         }
     }
 
-    pub fn find_cached_font(&self, font: super::FontSpecification) -> Option<Rc<CachedFont>> {
+    pub fn find_cached_font(&self, font: super::FontSpecification) -> Option<Rc<RefCell<CachedFont>>> {
         match self.font_families.get(font.family_name) {
             Some(family) => {
                 family.as_ref().borrow().types.get(&font.into()).cloned()
@@ -297,7 +300,7 @@ impl Win32PainterCache {
         }
     }
 
-    pub fn find_cached_font_closest(&self, font: super::FontSpecification) -> Option<Rc<CachedFont>> {
+    pub fn find_cached_font_closest(&self, font: super::FontSpecification) -> Option<Rc<RefCell<CachedFont>>> {
         match self.font_families.get(font.family_name) {
             Some(family) => {
                 let font = Into::<FontVariantCacheKey>::into(font);
@@ -348,7 +351,7 @@ impl Win32TextCalculator {
         Self { factory, cache }
     }
 
-    fn get_font(&mut self, font_spec: super::FontSpecification) -> Result<Rc<CachedFont>, FontSelectionError> {
+    fn get_font(&mut self, font_spec: super::FontSpecification) -> Result<Rc<RefCell<CachedFont>>, FontSelectionError> {
         if let Some(cached_font) = self.cache.find_cached_font(font_spec) {
             return Ok(cached_font);
         }
@@ -361,11 +364,12 @@ impl Win32TextCalculator {
 impl super::TextCalculator for Win32TextCalculator {
     fn calculate_text_size(&mut self, font_spec: super::FontSpecification, text: &str) -> Result<Size<f32>, FontSelectionError> {
         let font = self.get_font(font_spec)?;
+        let font = font.borrow();
         Ok(self.factory.create_text_layout(text, &font.format, mltg::TextAlignment::Leading, None).unwrap().size().into())
     }
 
     fn line_spacing(&mut self, font: super::FontSpecification) -> Result<f32, FontSelectionError> {
-        Ok(self.get_font(font)?.format.line_spacing().unwrap().height)
+        Ok(self.get_font(font)?.as_ref().borrow().format.line_spacing().unwrap().height)
     }
 }
 
@@ -385,7 +389,7 @@ pub struct Win32Painter {
     current_cache: super::PainterCache,
     quality: super::PaintQuality,
 
-    selected_font: SelectOption<Rc<CachedFont>>,
+    selected_font: SelectOption<Rc<RefCell<CachedFont>>>,
 
     commands: Vec<PaintCommand>,
 
@@ -544,8 +548,18 @@ impl super::Painter for Win32Painter {
             None => None,
             Some(size) => Some(size.into())
         };
-        let layout = self.factory.create_text_layout(text, &self.selected_font.as_ref().unwrap().format, mltg::TextAlignment::Leading, None)
-            .unwrap();
+
+        let font = self.selected_font.as_ref().unwrap();
+        let mut font = font.as_ref().borrow_mut();
+        let format = font.format.clone();
+        let layout = match font.text_layouts.entry(String::from(text)) {
+            Entry::Occupied(o) => o.into_mut(),
+            Entry::Vacant(v) => v.insert(
+                self.factory.create_text_layout(text, &format, mltg::TextAlignment::Leading, None)
+                    .unwrap()
+            )
+        }.clone();
+
         let size = layout.size();
         self.commands.push(PaintCommand::Text { brush, position, layout, exact_size });
         size.into()
@@ -576,7 +590,7 @@ impl super::Painter for Win32Painter {
 
         if let Some(font) = found_font {
             // Add a reference from the other cache into the current cache.
-            self.current_cache().font_families.insert(String::from(font_spec.family_name), font.parent.clone());
+            self.current_cache().font_families.insert(Rc::from(font_spec.family_name), font.borrow().parent.clone());
 
             self.selected_font = SelectOption::Some(font);
             return Ok(());
