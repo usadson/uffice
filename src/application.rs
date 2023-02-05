@@ -70,6 +70,9 @@ use crate::user_settings::UserSettings;
 /// The background color of the application. This is the color under the pages.
 const APPLICATION_BACKGROUND_COLOR: Color = Color::from_rgb(29, 28, 33);
 
+/// The zoom factor on top of the zoom factor.
+const GENERAL_ZOOM_MUTLIPLIER: f32 = 0.8;
+
 /// After how much time should a tooltip be shown (if applicable).
 ///
 /// The following is used as a recommendation:
@@ -339,7 +342,7 @@ impl Tab {
 
         assert!(event.painter.try_borrow_mut().is_ok(), "Failed to painter borrow as mutable; we can never send the PaintEvent to the tab!");
 
-        let zoom_level = self.zoomer.zoom_factor();
+        let zoom_level = self.zoomer.zoom_factor() * GENERAL_ZOOM_MUTLIPLIER;
         self.tab_event_sender.send(TabEvent::Paint {
             painter: event.painter.clone(),
             content_rect,
