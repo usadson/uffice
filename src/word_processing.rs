@@ -336,7 +336,8 @@ fn process_paragraph_element(context: &mut Context,
         line_spacing = context.text_calculator.line_spacing(font_spec).unwrap() as f32 * HALF_POINT;
     }
 
-    let paragraph_spacing = paragraph.text_settings.spacing_below_paragraph.unwrap_or(0.0);
+    let paragraph_spacing = paragraph.text_settings.spacing_below_paragraph.unwrap_or(TwelfteenthPoint(0));
+    let paragraph_spacing = paragraph_spacing.get_pts();
 
     assert!(line_spacing >= 0.0);
     assert!(paragraph_spacing >= 0.0);
@@ -395,8 +396,8 @@ pub fn process_paragraph_properties_element(numbering_manager: &numbering::Numbe
                     // println!("│  │  │  ├─ Spacing Attribute: {} = {}", attribute.name(), attribute.value());
                     match attribute.name() {
                         "after" => {
-                            paragraph_text_settings.spacing_below_paragraph = Some(str::parse(attribute.value())
-                                    .expect("Failed to parse <w:spacing> 'after' attribute"));
+                            paragraph_text_settings.spacing_below_paragraph = Some(TwelfteenthPoint(str::parse(attribute.value())
+                                    .expect("Failed to parse <w:spacing> 'after' attribute")));
                         }
                         _ => ()
                     }

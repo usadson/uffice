@@ -101,7 +101,7 @@ pub struct TextSettings {
     pub font: Option<String>,
     pub color: Option<Color>,
 
-    pub spacing_below_paragraph: Option<f32>,
+    pub spacing_below_paragraph: Option<TwelfteenthPoint<u32>>,
     pub non_complex_text_size: Option<u32>,
     pub justify: Option<TextJustification>,
 

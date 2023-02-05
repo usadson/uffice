@@ -2,6 +2,7 @@
 // All Rights Reserved.
 
 use roxmltree as xml;
+use uffice_lib::TwelfteenthPoint;
 use std::collections::HashMap;
 
 use crate::{error::Error, WORD_PROCESSING_XML_NAMESPACE, text_settings::TextSettings};
@@ -107,6 +108,9 @@ fn process_xml_doc_defaults(element: &xml::Node, manager: &mut StyleManager) {
             "rPrDefault" => {
                 process_xml_rpr_default(&child, manager);
             }
+            "pPrDefault" => {
+                process_xml_ppr_default(&child, manager);
+            }
             _ => ()
         }
     }
@@ -124,6 +128,31 @@ fn process_xml_rpr_default(element: &xml::Node, manager: &mut StyleManager) {
                 settings.apply_run_properties_element(manager, &child);
 
                 manager.default_text_settings = settings;
+            }
+            _ => ()
+        }
+    }
+}
+
+fn process_xml_ppr_default(element: &xml::Node, manager: &mut StyleManager) {
+    for child in element.children() {
+        #[cfg(feature = "debug-styles")]
+        println!("Style⟫ │  │  ├─ {}", child.tag_name().name());
+
+        match child.tag_name().name() {
+            "pPr" => {
+
+                // TODO implement this better
+                for property in child.children() {
+                    match property.tag_name().name() {
+                        "spacing" => {
+                            if let Some(val) = property.attribute((WORD_PROCESSING_XML_NAMESPACE, "after")) {
+                                manager.default_text_settings.spacing_below_paragraph = Some(TwelfteenthPoint(val.parse().unwrap()));
+                            }
+                        }
+                        _ => ()
+                    }
+                }
             }
             _ => ()
         }

@@ -6,7 +6,7 @@ license = "BSD-2-Clause"
 name = "uffice"
 publish = false
 repository = "https://github.com/usadson/uffice"
-version = "0.2.1"
+version = "0.2.2"
 default-run = "uffice"
 
 [dependencies]
