@@ -326,9 +326,24 @@ impl Hyperlink {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct StructuredDocumentTag {
+#[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum StructuredDocumentTagLevel {
+    /// The tag is found in the document <w:body>.
+    Block,
 
+    #[allow(dead_code)]
+    Row,
+
+    /// The tag is found in a <w:p> element.
+    Inline,
+
+    #[allow(dead_code)]
+    Cell,
+}
+
+#[derive(Debug)]
+pub struct StructuredDocumentTag {
+    pub level: StructuredDocumentTagLevel,
 }
 
 #[derive(Debug)]

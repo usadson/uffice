@@ -23,7 +23,7 @@ use crate::{
         Document,
         layout::LineLayout,
         Node,
-        numbering, instructions,
+        numbering, instructions, StructuredDocumentTagLevel, StructuredDocumentTag,
     },
     gui::painter::{
         TextCalculator,
@@ -176,7 +176,7 @@ fn process_body_element(context: &mut Context,
     for child in node.children() {
         match child.tag_name().name() {
             "p" => position = process_paragraph_element(context, parent, &child, position),
-            "sdt" => position = process_structured_document_tag(context, parent, &child, position),
+            "sdt" => position = process_structured_document_tag_block_level(context, parent, &child, position),
             _ => ()
         }
 
@@ -295,6 +295,11 @@ fn process_paragraph_element(context: &mut Context,
             // Text Run
             "r" => {
                 position = process_text_run_element(context, paragraph, &mut line_layout, &child, position);
+            }
+
+            // Structured Document Tag
+            "sdt" => {
+                position = process_structured_document_tag_non_block_level(context, paragraph, &child, original_position, StructuredDocumentTagLevel::Inline, &mut line_layout);
             }
 
             _ => ()
@@ -479,7 +484,7 @@ fn process_sdt_end_character_properties(_context: &mut Context, _parent: &mut No
 }
 
 /// Process the <w:sdtContent> element
-fn process_sdt_content(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
+fn process_sdt_content_block_level(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
     let mut position = original_position;
 
     for child in node.children() {
@@ -493,22 +498,79 @@ fn process_sdt_content(context: &mut Context, parent: &mut Node, node: &xml::Nod
     position
 }
 
-/// Process the <w:sdt> element
-/// 17.5.2 Structured Document Tags
-fn process_structured_document_tag(context: &mut Context,
-                                   parent: &mut Node,
-                                   node: &xml::Node,
-                                   original_position: Position<f32>) -> Position<f32> {
+/// Process the <w:sdtContent> element
+fn process_sdt_content_non_block_level(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Position<f32>,
+        line_layout: &mut LineLayout) -> Position<f32> {
     let mut position = original_position;
 
-    let sdt = wp::append_child(parent, wp::Node::new(wp::NodeData::StructuredDocumentTag(Default::default())));
+    for child in node.children() {
+        match child.tag_name().name() {
+            "r" => position = process_text_run_element(context, parent, line_layout, &child, position),
+            _ => {
+                #[cfg(debug_assertions)]
+                println!("[WARNING] Unknown element in <w:sdtContent> (non-block): {}", child.tag_name().name());
+            }
+        }
+    }
+
+    position
+}
+
+/// Process the <w:sdt> element
+/// 17.5.2 Structured Document Tags
+fn process_structured_document_tag_block_level(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
+    let mut position = original_position;
+
+    let sdt = wp::append_child(parent,
+        wp::Node::new(
+            wp::NodeData::StructuredDocumentTag(
+                StructuredDocumentTag{
+                    level: StructuredDocumentTagLevel::Block,
+                }
+            )
+        )
+    );
     let sdt = parent.nth_child_mut(sdt);
 
     for child in node.children() {
         // println!("│  ├─ {}", child.tag_name().name());
 
         match child.tag_name().name() {
-            "sdtContent" => position = process_sdt_content(context, sdt, &child, original_position),
+            "sdtContent" => position = process_sdt_content_block_level(context, sdt, &child, original_position),
+            "sdtEndPr" => process_sdt_end_character_properties(context, sdt, &child),
+            "sdtPr" => process_std_properties(context, sdt, &child),
+            _ => panic!("Illegal <w:sdt> child named: \"{}\" in namespace \"{}\"", child.tag_name().name(), child.tag_name().namespace().unwrap_or(""))
+        }
+
+        sdt.check_last_page_number_from_new_child();
+    }
+
+    position
+}
+
+/// Process the <w:sdt> element
+/// 17.5.2 Structured Document Tags
+fn process_structured_document_tag_non_block_level(context: &mut Context,
+        parent: &mut Node, node: &xml::Node, original_position: Position<f32>,
+        level: StructuredDocumentTagLevel, line_layout: &mut LineLayout) -> Position<f32> {
+    let mut position = original_position;
+
+    let sdt = wp::append_child(parent,
+        wp::Node::new(
+            wp::NodeData::StructuredDocumentTag(
+                StructuredDocumentTag{
+                    level
+                }
+            )
+        )
+    );
+    let sdt = parent.nth_child_mut(sdt);
+
+    for child in node.children() {
+        // println!("│  ├─ {}", child.tag_name().name());
+
+        match child.tag_name().name() {
+            "sdtContent" => position = process_sdt_content_non_block_level(context, sdt, &child, original_position, line_layout),
             "sdtEndPr" => process_sdt_end_character_properties(context, sdt, &child),
             "sdtPr" => process_std_properties(context, sdt, &child),
             _ => panic!("Illegal <w:sdt> child named: \"{}\" in namespace \"{}\"", child.tag_name().name(), child.tag_name().namespace().unwrap_or(""))
