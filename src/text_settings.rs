@@ -4,7 +4,7 @@
 use std::{rc::Rc, cell::RefCell};
 
 use roxmltree as xml;
-use uffice_lib::TwelfteenthPoint;
+use uffice_lib::{TwelfteenthPoint, HalfPoint};
 
 use crate::{
     color_parser,
@@ -102,7 +102,7 @@ pub struct TextSettings {
     pub color: Option<Color>,
 
     pub spacing_below_paragraph: Option<TwelfteenthPoint<u32>>,
-    pub non_complex_text_size: Option<u32>,
+    pub non_complex_text_size: Option<HalfPoint<u32>>,
     pub justify: Option<TextJustification>,
 
     pub highlight_color: Option<Color>,
@@ -214,9 +214,9 @@ impl TextSettings {
                     for attr in run_property.attributes() {
                         //println!("│  │  │  │  ├─ Size Attribute: {} => {}", attr.name(), attr.value());
                         if attr.name() == "val" {
-                            let new_value = str::parse::<u32>(attr.value()).expect("Failed to parse attribute");
+                            let new_value = str::parse(attr.value()).expect("Failed to parse attribute");
                             //println!("│  │  │  │  ├─ Value Attribute: old={:?} new={}", self.non_complex_text_size, new_value);
-                            self.non_complex_text_size = Some(new_value);
+                            self.non_complex_text_size = Some(HalfPoint(new_value));
                         }
                     }
                 }

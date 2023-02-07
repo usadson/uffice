@@ -15,7 +15,7 @@ use crate::{
     },
     word_processing::{
         DocumentResult,
-        self, HALF_POINT,
+        self,
     },
     application::load_archive_file_to_string,
     relationships::Relationships,
@@ -178,7 +178,7 @@ impl DocumentView {
 
                 match &node.data {
                     wp::NodeData::TextPart(part) => {
-                        let text_size = node.text_settings.non_complex_text_size.unwrap() as f32 * HALF_POINT * event.zoom;
+                        let text_size = node.text_settings.non_complex_text_size.unwrap().get_pts();
                         let font_family_name = node.text_settings.font.clone().unwrap_or(String::from("Calibri"));
                         event.painter.select_font(FontSpecification::new(&font_family_name, text_size, node.text_settings.font_weight())).unwrap();
 

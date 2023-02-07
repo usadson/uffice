@@ -56,6 +56,26 @@ impl Keyboard {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct WholePoint<T>(pub T);
+
+impl WholePoint<u32> {
+    /// Get the value in points.
+    pub fn get_pts(&self) -> f32 {
+        self.0 as f32
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct HalfPoint<T>(pub T);
+
+impl HalfPoint<u32> {
+    /// Get the value in points.
+    pub fn get_pts(&self) -> f32 {
+        self.0 as f32 / 2.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TwelfteenthPoint<T>(pub T);
 
 impl TwelfteenthPoint<u32> {
@@ -69,5 +89,15 @@ impl TwelfteenthPoint<i32> {
     /// Get the value in points.
     pub fn get_pts(&self) -> f32 {
         self.0 as f32 / 12.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EighteenthPoint<T>(pub T);
+
+impl EighteenthPoint<u32> {
+    /// Get the value in points.
+    pub fn get_pts(&self) -> f32 {
+        self.0 as f32 / 8.0
     }
 }

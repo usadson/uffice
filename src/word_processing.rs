@@ -317,7 +317,7 @@ fn process_paragraph_element(context: &mut Context,
     };
     let font_spec = FontSpecification::new(
         &family_name,
-        paragraph.text_settings.non_complex_text_size.unwrap() as f32 * HALF_POINT,
+        paragraph.text_settings.non_complex_text_size.unwrap().get_pts(),
         paragraph.text_settings.font_weight(),
     );
 
@@ -724,7 +724,7 @@ pub fn process_text_element_text(parent: &mut Node, line_layout: &mut wp::layout
         Some(font) => font,
     };
     let font_spec = FontSpecification::new(
-        &family_name, text_settings.non_complex_text_size.unwrap() as f32 * HALF_POINT, text_settings.font_weight(),
+        &family_name, text_settings.non_complex_text_size.unwrap().get_pts(), text_settings.font_weight(),
     );
 
     let line_spacing = text_calculator.line_spacing(font_spec).unwrap();
