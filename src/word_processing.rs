@@ -23,18 +23,20 @@ use crate::{
         Document,
         layout::LineLayout,
         Node,
-        numbering, instructions, StructuredDocumentTagLevel, StructuredDocumentTag,
+        numbering, instructions, StructuredDocumentTagLevel, StructuredDocumentTag, table::TableProperties,
     },
     gui::painter::{
         TextCalculator,
         FontSpecification,
     },
-    style::StyleManager,
+    style::StyleManager, serialize::FromXmlStandalone,
 };
 
 pub const TWELFTEENTH_POINT: f32 = 1f32 / 12.0;
 pub const HALF_POINT: f32 = 0.5;
 const LINE_SPACING: f32 = 6.0;
+
+type ThemeSettings = drawing_ml::style::StyleSettings;
 
 struct Context<'a> {
     document: &'a mut Document,
@@ -45,6 +47,8 @@ struct Context<'a> {
     document_relationships: &'a Relationships,
     style_manager: &'a StyleManager,
     page_settings: PageSettings,
+
+    drawing_ml_style_settings: drawing_ml::style::StyleSettings,
 
     numbering_manager: wp::numbering::NumberingManager,
 }
@@ -103,6 +107,7 @@ pub fn process_document(xml_document: &xml::Document, style_manager: &StyleManag
                         numbering_manager: wp::numbering::NumberingManager,
                         document_properties: wp::document_properties::DocumentProperties,
                         text_calculator: &mut dyn gui::painter::TextCalculator,
+                        drawing_ml_style_settings: drawing_ml::style::StyleSettings,
                         progress_sender: &dyn Fn(f32)) -> DocumentResult {
     let text_settings = style_manager.default_text_settings();
     let page_settings = load_page_settings(xml_document).unwrap();
@@ -127,6 +132,8 @@ pub fn process_document(xml_document: &xml::Document, style_manager: &StyleManag
         document_relationships,
         style_manager,
         page_settings,
+
+        drawing_ml_style_settings,
 
         numbering_manager,
     };
@@ -268,7 +275,7 @@ fn process_paragraph_element(context: &mut Context,
 
     {
         if let Some(numbering) = paragraph.text_settings.numbering.clone() {
-            let node = numbering.create_node(paragraph, &mut line_layout, context.text_calculator);
+            let node = numbering.create_node(paragraph, &mut line_layout, context.text_calculator, &context.drawing_ml_style_settings);
             *position.x_mut() += paragraph.nth_child_mut(node.0).nth_child_mut(node.1).size.width();
             // println!("Numbering Width: {}", node.as_ref().borrow().size.x);
 
@@ -311,8 +318,8 @@ fn process_paragraph_element(context: &mut Context,
 
     // let font = context.font_manager.load_font(&paragraph.text_settings);
     // let text = paragraph.text_settings.create_text(&font);
-    let family_name = match &paragraph.text_settings.font {
-        None => "Calibri",
+    let family_name: &str = match &paragraph.text_settings.font {
+        None => &*context.drawing_ml_style_settings.theme_elements.font_scheme.major_font.latin.typeface,
         Some(font) => font,
     };
     let font_spec = FontSpecification::new(
@@ -589,12 +596,20 @@ fn process_structured_document_tag_non_block_level(context: &mut Context,
 fn process_table_element(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
     let mut position = original_position;
 
-    let table = wp::append_child(parent, wp::Node::new(wp::NodeData::Table));
+    let properties = match node.children().find(|child| child.tag_name().name() == "tblPr") {
+        Some(child) => TableProperties::from_xml(&child).unwrap(),
+        None => Default::default(),
+    };
+
+    let table = wp::append_child(parent, wp::Node::new(wp::NodeData::Table{
+        properties
+    }));
+
     let table = parent.nth_child_mut(table);
 
     for child in node.children() {
         match child.tag_name().name() {
-            "tblPr" => (), // TODO
+            "tblPr" => (),
             "tblGrid" => (), // TODO
             "tr" => position = process_table_row_element(context, table, &child, position),
             _ => {
@@ -674,7 +689,7 @@ fn process_text_element(context: &mut Context,
         if child.node_type() == xml::NodeType::Text {
             let text_string = child.text().unwrap();
             // println!("│  │  │  ├─ Text: \"{}\"", text_string);
-            position = process_text_element_text(text_node, line_layout, context.text_calculator, text_string, position);
+            position = process_text_element_text(text_node, line_layout, context.text_calculator, text_string, &context.drawing_ml_style_settings, position);
         }
     }
 
@@ -689,15 +704,16 @@ fn process_text_element_in_instructed_field(context: &mut Context,
         parent: &mut Node, line_layout: &mut LineLayout,
         _position: Position<f32>, field: &wp::instructions::Field) -> Position<f32> {
     let field_resolved_for_display = field.resolve_to_string(context.document);
-    append_text_element(&field_resolved_for_display, parent, line_layout, context.text_calculator)
+    append_text_element(&field_resolved_for_display, parent, line_layout, context.text_calculator, &context.drawing_ml_style_settings)
 }
 
-pub fn append_text_element(text_string: &str, parent: &mut Node, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator) -> Position<f32> {
+pub fn append_text_element(text_string: &str, parent: &mut Node, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator, theme: &ThemeSettings) -> Position<f32> {
     let position = line_layout.position_on_line;
-    process_text_element_text(parent, line_layout, text_calculator, text_string, position)
+    process_text_element_text(parent, line_layout, text_calculator, text_string, theme, position)
 }
 
-pub fn process_text_element_text(parent: &mut Node, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator, text_string: &str, original_position: Position<f32>) -> Position<f32> {
+pub fn process_text_element_text(parent: &mut Node, line_layout: &mut wp::layout::LineLayout, text_calculator: &mut dyn TextCalculator, text_string: &str,
+        theme: &drawing_ml::style::StyleSettings, original_position: Position<f32>) -> Position<f32> {
     #[derive(Debug)]
     enum LineStopReason {
         /// The end of the text was reached. This could also very well mean the
@@ -719,8 +735,8 @@ pub fn process_text_element_text(parent: &mut Node, line_layout: &mut wp::layout
     let mut page_number = parent.page_last;
     let text_settings = parent.text_settings.clone();
 
-    let family_name = match &text_settings.font {
-        None => "Calibri",
+    let family_name: &str = match &text_settings.font {
+        None => &*theme.theme_elements.font_scheme.major_font.latin.typeface,
         Some(font) => font,
     };
     let font_spec = FontSpecification::new(
@@ -893,7 +909,7 @@ fn process_text_run_element(context: &mut Context,
             }
 
             "rPr" =>  {
-                text_run.text_settings.apply_run_properties_element(context.style_manager, &text_run_property);
+                text_run.text_settings.apply_run_properties_element(context.style_manager, &context.drawing_ml_style_settings, &text_run_property);
             }
 
             "t" => {

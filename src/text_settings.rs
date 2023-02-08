@@ -14,6 +14,7 @@ use crate::{
         layout::LineLayout,
         Node,
     },
+    drawing_ml,
     gui::Color,
     gui::{
         painter::{
@@ -54,7 +55,8 @@ pub struct Numbering {
 }
 impl Numbering {
     pub fn create_node(&self, paragraph: &mut Node, line_layout: &mut LineLayout,
-                       text_calculator: &mut dyn TextCalculator) -> (usize, usize) {
+                       text_calculator: &mut dyn TextCalculator,
+                       theme: &crate::drawing_ml::style::StyleSettings) -> (usize, usize) {
         let numbering_definition_instance = &self.definition
                 .as_ref()
                 .unwrap().as_ref().borrow_mut();
@@ -83,7 +85,7 @@ impl Numbering {
         let num_parent = paragraph.nth_child_mut(numbering_parent);
         num_parent.text_settings = text_settings;
 
-        crate::word_processing::append_text_element(&displayed_text, num_parent, line_layout, text_calculator);
+        crate::word_processing::append_text_element(&displayed_text, num_parent, line_layout, text_calculator, theme);
         (numbering_parent, 0)
     }
 
@@ -98,7 +100,7 @@ impl Numbering {
 pub struct TextSettings {
     pub bold: Option<bool>,
     pub underline: Option<bool>,
-    pub font: Option<String>,
+    pub font: Option<Rc<str>>,
     pub color: Option<Color>,
 
     pub spacing_below_paragraph: Option<TwelfteenthPoint<u32>>,
@@ -169,7 +171,7 @@ impl TextSettings {
         style
     }
 
-    pub fn apply_run_properties_element(&mut self, style_manager: &StyleManager, element: &xml::Node) {
+    pub fn apply_run_properties_element(&mut self, style_manager: &StyleManager, theme_settings: &drawing_ml::style::StyleSettings, element: &xml::Node) {
         assert_eq!(element.tag_name().name(), "rPr");
 
         for run_property in element.children() {
@@ -196,11 +198,26 @@ impl TextSettings {
                 }
 
                 "rFonts" => {
-                    for attr in run_property.attributes() {
-                        //println!("│  │  │  │  ├─ Font Attribute: {} => {}", attr.name(), attr.value());
-                        if attr.name() == "ascii" {
-                            self.font = Some(String::from(attr.value()));
+                    if let Some(value) = run_property.attribute((WORD_PROCESSING_XML_NAMESPACE, "asciiTheme")) {
+                        match value {
+                            "majorAnsi" => {
+                                self.font = Some(theme_settings.theme_elements.font_scheme.major_font.latin.typeface.clone());
+                            }
+                            "minorAnsi" => {
+                                self.font = Some(theme_settings.theme_elements.font_scheme.minor_font.latin.typeface.clone());
+                            }
+                            "majorHAnsi" => {
+                                self.font = Some(theme_settings.theme_elements.font_scheme.major_font.latin.typeface.clone());
+                            }
+                            "minorHAnsi" => {
+                                self.font = Some(theme_settings.theme_elements.font_scheme.minor_font.latin.typeface.clone());
+                            }
+                            _ => {
+                                println!("[WARNING] Unknown w:asciiTheme value: {}", value);
+                            }
                         }
+                    } else if let Some(value) = run_property.attribute((WORD_PROCESSING_XML_NAMESPACE, "ascii")) {
+                        self.font = Some(Rc::from(value));
                     }
                 }
 

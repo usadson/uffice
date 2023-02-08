@@ -1,12 +1,15 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+use std::rc::Rc;
+
 use roxmltree as xml;
 
 use uffice_lib::{profiling::Profiler, profile_expr};
 use winit::window::CursorIcon;
 
 use crate::{
+    drawing_ml,
     wp::{
         self,
         numbering::NumberingManager,
@@ -19,6 +22,7 @@ use crate::{
     },
     application::load_archive_file_to_string,
     relationships::Relationships,
+    serialize::FromXmlStandalone,
     style::StyleManager,
     gui::{painter::{FontSpecification, TextCalculator}, Rect, Size, Position},
 };
@@ -81,6 +85,18 @@ fn draw_document(archive_path: &str, text_calculator: &mut dyn TextCalculator, p
         }
     };
 
+    let theme_settings = {
+        let _frame = profiler.frame(String::from("DrawingML Style Settings"));
+
+        if let Some(style_document_text) = load_archive_file_to_string(&mut archive, "word/theme/theme1.xml") {
+            let style_document = xml::Document::parse(&style_document_text)
+                .expect("Failed to parse DrawingML Style Settings XML document");
+            drawing_ml::style::StyleSettings::from_xml(&style_document.root()).unwrap()
+        } else {
+            Default::default()
+        }
+    };
+
     let style_manager = {
         let _frame = profiler.frame(String::from("Style Definitions"));
 
@@ -88,7 +104,7 @@ fn draw_document(archive_path: &str, text_calculator: &mut dyn TextCalculator, p
                 .expect("Style definitions missing, assuming this is not a DOCX file.");
         let styles_document = xml::Document::parse(&styles_document_text)
                 .expect("Failed to parse styles document");
-        StyleManager::from_document(&styles_document, &numbering_manager).unwrap()
+        StyleManager::from_document(&styles_document, &numbering_manager, &theme_settings).unwrap()
     };
 
     let mut document_properties = wp::document_properties::DocumentProperties::new();
@@ -104,7 +120,7 @@ fn draw_document(archive_path: &str, text_calculator: &mut dyn TextCalculator, p
     let document = xml::Document::parse(&document_text)
             .expect("Failed to parse document");
 
-    word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager, document_properties, text_calculator, progress_sender)
+    word_processing::process_document(&document, &style_manager, &document_relationships, numbering_manager, document_properties, text_calculator, theme_settings, progress_sender)
 }
 
 impl DocumentView {
@@ -179,7 +195,7 @@ impl DocumentView {
                 match &node.data {
                     wp::NodeData::TextPart(part) => {
                         let text_size = node.text_settings.non_complex_text_size.unwrap().get_pts();
-                        let font_family_name = node.text_settings.font.clone().unwrap_or(String::from("Calibri"));
+                        let font_family_name = node.text_settings.font.clone().unwrap();
                         event.painter.select_font(FontSpecification::new(&font_family_name, text_size, node.text_settings.font_weight())).unwrap();
 
                         //let size =

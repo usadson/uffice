@@ -1,6 +1,8 @@
 // Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+pub mod style;
+
 use crate::{relationships::{Relationship, Relationships}, gui::Size};
 use roxmltree as xml;
 use std::{cell::RefCell, rc::Rc};

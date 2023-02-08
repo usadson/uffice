@@ -2120,7 +2120,7 @@ checksum = "9e79c4d996edb816c91e4308506774452e55e95c3c9de07b6729e17e15a5ef81"
 
 [[package]]
 name = "uffice"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "bitflags",
  "bytemuck",

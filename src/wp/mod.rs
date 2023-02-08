@@ -5,6 +5,7 @@ pub mod document_properties;
 pub mod instructions;
 pub mod layout;
 pub mod numbering;
+pub mod table;
 
 use std::{
     rc::Rc,
@@ -26,6 +27,8 @@ use crate::{
     relationships::Relationship,
 };
 
+use self::table::TableProperties;
+
 #[derive(Debug, strum_macros::IntoStaticStr)]
 pub enum NodeData {
     /// Line, column or page break.
@@ -43,7 +46,9 @@ pub enum NodeData {
     NumberingParent,
     Paragraph(Paragraph),
     StructuredDocumentTag(StructuredDocumentTag),
-    Table,
+    Table{
+        properties: TableProperties,
+    },
     TableRow,
     TableCell,
     Text,

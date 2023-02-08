@@ -2,13 +2,164 @@
 // All Rights Reserved.
 
 use roxmltree as xml;
-use uffice_lib::TwelfteenthPoint;
-use std::collections::HashMap;
 
-use crate::{error::Error, WORD_PROCESSING_XML_NAMESPACE, text_settings::TextSettings};
+use uffice_lib::{
+    EighteenthPoint,
+    TwelfteenthPoint,
+    WholePoint,
+};
+
+use std::{
+    collections::HashMap,
+    str::FromStr,
+    num::ParseIntError,
+};
+
+use crate::{
+    error::Error,
+    WORD_PROCESSING_XML_NAMESPACE,
+    text_settings::TextSettings, wp::table::TableProperties, serialize::FromXmlStandalone,
+};
+
+pub type ThemeSettings = crate::drawing_ml::style::StyleSettings;
+
+#[derive(Copy, Clone, Debug, Default)]
+pub enum BorderType {
+    Nil,
+    None,
+
+    #[default]
+    Single,
+}
+
+#[derive(Clone, Debug)]
+pub enum BorderTypeParseError {
+    UnknownBorderType(String),
+}
+
+impl FromStr for BorderType {
+    type Err = BorderTypeParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "nil" => Ok(Self::Nil),
+            "none" => Ok(Self::None),
+            "single" => Ok(Self::Single),
+            _ => Err(BorderTypeParseError::UnknownBorderType(s.to_string()))
+        }
+    }
+}
+
+/// The properties of a border.
+#[derive(Copy, Clone, Debug, Default)]
+pub struct BorderProperties {
+    pub border_type: BorderType,
+    pub width: EighteenthPoint<u32>,
+    pub spacing: WholePoint<u32>,
+    pub color: HexColor,
+}
+
+#[derive(Debug)]
+pub enum BorderPropertiesParseError {
+    BorderTypeParseError(BorderTypeParseError),
+    HexColorParseError(HexColorParseError),
+    ParseIntError(ParseIntError),
+
+    /// The `w:val` attribute is required by CT_Border.
+    ValAttributeMissing,
+}
+
+impl From<BorderTypeParseError> for BorderPropertiesParseError {
+    fn from(error: BorderTypeParseError) -> Self {
+        BorderPropertiesParseError::BorderTypeParseError(error)
+    }
+}
+
+impl From<HexColorParseError> for BorderPropertiesParseError {
+    fn from(error: HexColorParseError) -> Self {
+        BorderPropertiesParseError::HexColorParseError(error)
+    }
+}
+
+impl From<ParseIntError> for BorderPropertiesParseError {
+    fn from(error: ParseIntError) -> Self {
+        BorderPropertiesParseError::ParseIntError(error)
+    }
+}
+
+impl FromXmlStandalone for BorderProperties {
+    type ParseError = BorderPropertiesParseError;
+
+    fn from_xml(node: &xml::Node) -> Result<Self, BorderPropertiesParseError> {
+        let mut result = Self::default();
+
+        match node.attribute((WORD_PROCESSING_XML_NAMESPACE, "val")) {
+            Some(val) => result.border_type = val.parse()?,
+            None => return Err(BorderPropertiesParseError::ValAttributeMissing)
+        }
+
+        if let Some(size) = node.attribute((WORD_PROCESSING_XML_NAMESPACE, "sz")) {
+            result.width = EighteenthPoint(size.parse()?);
+        }
+
+        if let Some(space) = node.attribute((WORD_PROCESSING_XML_NAMESPACE, "space")) {
+            result.spacing = WholePoint(space.parse()?);
+        }
+
+        if let Some(color) = node.attribute((WORD_PROCESSING_XML_NAMESPACE, "color")) {
+            result.color = color.parse()?;
+        }
+
+        Ok(result)
+    }
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+pub enum HexColor {
+    #[default]
+    Auto,
+    Color(crate::gui::Color),
+}
+
+#[derive(Debug)]
+pub enum HexColorParseError {
+    NotSixHexadecimalDigits,
+    DigitOutOfRange,
+}
+
+impl FromStr for HexColor {
+    type Err = HexColorParseError;
+
+    fn from_str(s: &str) -> Result<Self, HexColorParseError> {
+        if s == "auto" {
+            return Ok(Self::Auto)
+        }
+
+        if s.len() != 6 {
+            return Err(HexColorParseError::NotSixHexadecimalDigits);
+        }
+
+        let mut result = [0u8; 6];
+        for i in 0..6 {
+            result[i] = match s.as_bytes()[i] {
+                b'0'..=b'9' => s.as_bytes()[i] - b'0',
+                b'a'..=b'f' => s.as_bytes()[i] - b'a' + 10,
+                b'A'..=b'F' => s.as_bytes()[i] - b'A' + 10,
+                _ => return Err(HexColorParseError::DigitOutOfRange)
+            };
+        }
+
+        Ok(Self::Color(crate::gui::Color::from_rgb(
+            result[0] * 16 + result[1],
+            result[2] * 16 + result[3],
+            result[4] * 16 + result[5]
+        )))
+    }
+}
 
 struct Style {
-    text_settings: TextSettings
+    text_settings: TextSettings,
+    table_properties: TableProperties,
 }
 
 fn is_correct_namespace(element: &xml::Node) -> bool {
@@ -22,7 +173,7 @@ fn is_correct_namespace(element: &xml::Node) -> bool {
 impl Style {
 
     pub fn from_document_by_style_id(manager: &mut StyleManager, numbering_manager: &crate::wp::numbering::NumberingManager,
-                                     document: &xml::Document, name: &str) -> Result<Self, Error> {
+                                     theme_settings: &ThemeSettings, document: &xml::Document, name: &str) -> Result<Self, Error> {
         assert!(is_correct_namespace(&document.root_element()));
 
         for element in document.root_element().children() {
@@ -32,7 +183,7 @@ impl Style {
 
             if let Some(id) = element.attribute((WORD_PROCESSING_XML_NAMESPACE, "styleId")) {
                 if id == name {
-                    return Self::from_xml(manager, numbering_manager, &element)
+                    return Self::from_xml(manager, theme_settings, numbering_manager, &element)
                 }
             }
         }
@@ -40,12 +191,14 @@ impl Style {
         Err(Error::StyleNotFound)
     }
 
-    pub fn from_xml(manager: &mut StyleManager, numbering_manager: &crate::wp::numbering::NumberingManager, element: &xml::Node) -> Result<Self, Error> {
+    pub fn from_xml(manager: &mut StyleManager, theme_settings: &ThemeSettings,
+            numbering_manager: &crate::wp::numbering::NumberingManager, element: &xml::Node) -> Result<Self, Error> {
         assert!(element.tag_name().namespace().is_some());
         assert_eq!(element.tag_name().namespace().unwrap(), WORD_PROCESSING_XML_NAMESPACE);
 
         let mut style = Style{
-            text_settings: TextSettings::new()
+            text_settings: TextSettings::new(),
+            table_properties: Default::default(),
         };
 
         for child in element.children() {
@@ -65,18 +218,21 @@ impl Style {
                     assert_ne!(element.attribute((WORD_PROCESSING_XML_NAMESPACE, "styleId")).unwrap(), val,
                             "The w:basedOn is used recursively on the same <w:style>! This is an error!");
 
-                    if let Ok(based_on_style) = manager.find_style_using_document(val, element.document(), numbering_manager) {
+                    if let Ok(based_on_style) = manager.find_style_using_document(val, element.document(), numbering_manager, theme_settings) {
                         style.inherit_from(based_on_style);
                     }
                 }
                 "rPr" => {
                     let mut settings = style.text_settings;
-                    settings.apply_run_properties_element(manager, &child);
+                    settings.apply_run_properties_element(manager, theme_settings, &child);
                     style.text_settings = settings;
                 }
                 "pPr" => {
                     crate::word_processing::process_paragraph_properties_element(numbering_manager, manager,
                         &mut style.text_settings, &child);
+                }
+                "tblPr" => {
+                    style.table_properties = TableProperties::from_xml(&child).unwrap();
                 }
                 _ => {
                     #[cfg(feature = "debug-styles")]
@@ -99,14 +255,14 @@ pub struct StyleManager {
     default_text_settings: TextSettings,
 }
 
-fn process_xml_doc_defaults(element: &xml::Node, manager: &mut StyleManager) {
+fn process_xml_doc_defaults(element: &xml::Node, manager: &mut StyleManager, theme_settings: &ThemeSettings) {
     for child in element.children() {
         #[cfg(feature = "debug-styles")]
         println!("Style⟫ │  ├─ {}", child.tag_name().name());
 
         match child.tag_name().name() {
             "rPrDefault" => {
-                process_xml_rpr_default(&child, manager);
+                process_xml_rpr_default(&child, theme_settings, manager);
             }
             "pPrDefault" => {
                 process_xml_ppr_default(&child, manager);
@@ -116,7 +272,7 @@ fn process_xml_doc_defaults(element: &xml::Node, manager: &mut StyleManager) {
     }
 }
 
-fn process_xml_rpr_default(element: &xml::Node, manager: &mut StyleManager) {
+fn process_xml_rpr_default(element: &xml::Node, theme_settings: &ThemeSettings, manager: &mut StyleManager) {
     for child in element.children() {
         #[cfg(feature = "debug-styles")]
         println!("Style⟫ │  │  ├─ {}", child.tag_name().name());
@@ -125,7 +281,7 @@ fn process_xml_rpr_default(element: &xml::Node, manager: &mut StyleManager) {
             "rPr" => {
                 let mut settings = manager.default_text_settings.clone();
 
-                settings.apply_run_properties_element(manager, &child);
+                settings.apply_run_properties_element(manager, theme_settings, &child);
 
                 manager.default_text_settings = settings;
             }
@@ -160,7 +316,8 @@ fn process_xml_ppr_default(element: &xml::Node, manager: &mut StyleManager) {
 }
 
 impl StyleManager {
-    pub fn from_document(document: &xml::Document, numbering_manager: &crate::wp::numbering::NumberingManager) -> Result<Self, Error> {
+    pub fn from_document(document: &xml::Document, numbering_manager: &crate::wp::numbering::NumberingManager,
+            theme_settings: &ThemeSettings) -> Result<Self, Error> {
         let mut manager = StyleManager{
             styles: HashMap::new(),
             default_text_settings: TextSettings::new()
@@ -181,13 +338,13 @@ impl StyleManager {
             }
 
             match element.tag_name().name() {
-                "docDefaults" => process_xml_doc_defaults(&element, &mut manager),
+                "docDefaults" => process_xml_doc_defaults(&element, &mut manager, theme_settings),
                 "style" =>
                     match element.attribute((WORD_PROCESSING_XML_NAMESPACE, "styleId")) {
                         Some(id) => {
                             #[cfg(feature = "debug-styles")]
                             println!("Style> {}", id);
-                            let style = Style::from_xml(&mut manager, numbering_manager, &element)?;
+                            let style = Style::from_xml(&mut manager, theme_settings, numbering_manager, &element,)?;
                             manager.styles.insert(String::from(id), style);
                         }
                         None => {
@@ -201,9 +358,10 @@ impl StyleManager {
         Ok(manager)
     }
 
-    fn find_style_using_document(&mut self, name: &str, document: &xml::Document, numbering_manager: &crate::wp::numbering::NumberingManager) -> Result<&Style, Error> {
+    fn find_style_using_document(&mut self, name: &str, document: &xml::Document, numbering_manager: &crate::wp::numbering::NumberingManager,
+            theme_settings: &ThemeSettings) -> Result<&Style, Error> {
         if !self.styles.contains_key(name) {
-            let style = Style::from_document_by_style_id(self, numbering_manager, document, name)?;
+            let style = Style::from_document_by_style_id(self, numbering_manager, theme_settings, document, name)?;
 
             self.styles.insert(String::from(name), style);
         }

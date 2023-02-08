@@ -11,6 +11,7 @@ mod fonts;
 mod gui;
 mod platform;
 mod relationships;
+mod serialize;
 mod style;
 mod text_settings;
 mod word_processing;
