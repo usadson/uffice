@@ -23,7 +23,11 @@ use crate::{
         Document,
         layout::LineLayout,
         Node,
-        numbering, instructions, StructuredDocumentTagLevel, StructuredDocumentTag, table::TableProperties,
+        numbering, instructions, StructuredDocumentTagLevel, StructuredDocumentTag,
+        table::{
+            TableProperties,
+            TableGrid,
+        },
     },
     gui::painter::{
         TextCalculator,
@@ -596,12 +600,18 @@ fn process_structured_document_tag_non_block_level(context: &mut Context,
 fn process_table_element(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
     let mut position = original_position;
 
+    let grid = match node.children().find(|child| child.tag_name().name() == "tblGrid") {
+        Some(child) => TableGrid::from_xml(&child).unwrap(),
+        None => Default::default(),
+    };
+
     let properties = match node.children().find(|child| child.tag_name().name() == "tblPr") {
         Some(child) => TableProperties::from_xml(&child).unwrap(),
         None => Default::default(),
     };
 
     let table = wp::append_child(parent, wp::Node::new(wp::NodeData::Table{
+        grid,
         properties
     }));
 
@@ -610,7 +620,7 @@ fn process_table_element(context: &mut Context, parent: &mut Node, node: &xml::N
     for child in node.children() {
         match child.tag_name().name() {
             "tblPr" => (),
-            "tblGrid" => (), // TODO
+            "tblGrid" => (),
             "tr" => position = process_table_row_element(context, table, &child, position),
             _ => {
                 #[cfg(debug_assertions)]

@@ -27,7 +27,10 @@ use crate::{
     relationships::Relationship,
 };
 
-use self::table::TableProperties;
+use self::table::{
+    TableGrid,
+    TableProperties,
+};
 
 #[derive(Debug, strum_macros::IntoStaticStr)]
 pub enum NodeData {
@@ -47,6 +50,7 @@ pub enum NodeData {
     Paragraph(Paragraph),
     StructuredDocumentTag(StructuredDocumentTag),
     Table{
+        grid: TableGrid,
         properties: TableProperties,
     },
     TableRow,
