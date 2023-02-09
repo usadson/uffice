@@ -289,18 +289,16 @@ fn process_paragraph_element(context: &mut Context,
 
     {
         if let Some(numbering) = paragraph.text_settings.numbering.clone() {
-            let node = numbering.create_node(paragraph, &mut line_layout, context.text_calculator, &context.drawing_ml_style_settings);
-            *position.x_mut() += paragraph.nth_child_mut(node.0).nth_child_mut(node.1).size.width();
-            // println!("Numbering Width: {}", node.as_ref().borrow().size.x);
+            if let Some(node) = numbering.create_node(paragraph, &mut line_layout, context.text_calculator, &context.drawing_ml_style_settings) {
+                *position.x_mut() += paragraph.nth_child_mut(node.0).nth_child_mut(node.1).size.width();
 
+                pub const NUMBERING_INDENTATION: f32 = 700.0 * TWELFTEENTH_POINT;
 
-
-            pub const NUMBERING_INDENTATION: f32 = 700.0 * TWELFTEENTH_POINT;
-
-            if paragraph.text_settings.indentation_left.is_some() {
-                *position.x_mut() = paragraph.text_settings.indent_one(position.x(), true);
-            } else {
-                *position.x_mut() = (position.x() / NUMBERING_INDENTATION + 1.0).floor() * NUMBERING_INDENTATION;
+                if paragraph.text_settings.indentation_left.is_some() {
+                    *position.x_mut() = paragraph.text_settings.indent_one(position.x(), true);
+                } else {
+                    *position.x_mut() = (position.x() / NUMBERING_INDENTATION + 1.0).floor() * NUMBERING_INDENTATION;
+                }
             }
         }
     }
@@ -455,6 +453,9 @@ fn process_numbering_definition_instance_reference_property(numbering_manager: &
                     .expect("No w:val attribute on <w:numId>!").parse().unwrap();
 
                 numbering.definition = numbering_manager.find_definition_instance(instance_id);
+                if numbering.definition.is_none() {
+                    println!("[WARNING] numId: No numbering definition found for instance id {}", instance_id);
+                }
             }
 
             _ => println!("[WARNING] Unknown element in <w:numPr>: {}", child.tag_name().name()),

@@ -56,10 +56,14 @@ pub struct Numbering {
 impl Numbering {
     pub fn create_node(&self, paragraph: &mut Node, line_layout: &mut LineLayout,
                        text_calculator: &mut dyn TextCalculator,
-                       theme: &crate::drawing_ml::style::StyleSettings) -> (usize, usize) {
-        let numbering_definition_instance = &self.definition
-                .as_ref()
-                .unwrap().as_ref().borrow_mut();
+                       theme: &crate::drawing_ml::style::StyleSettings) -> Option<(usize, usize)> {
+        let Some(numbering_definition_instance) = &self.definition else {
+            println!("[WARNING] Numbering definition instance is None.");
+            return None;
+        };
+
+        let numbering_definition_instance = numbering_definition_instance.as_ref().borrow_mut();
+
         let abstract_definition = numbering_definition_instance
                 .abstract_numbering_definition
                 .as_ref()
@@ -86,7 +90,7 @@ impl Numbering {
         num_parent.text_settings = text_settings;
 
         crate::word_processing::append_text_element(&displayed_text, num_parent, line_layout, text_calculator, theme);
-        (numbering_parent, 0)
+        Some((numbering_parent, 0))
     }
 
     fn combine_text_settings(&self, paragraph: &crate::wp::Node, level: &crate::wp::numbering::NumberingLevelDefinition) -> TextSettings {
