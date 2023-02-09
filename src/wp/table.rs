@@ -13,7 +13,7 @@ use crate::{
     serialize::FromXmlStandalone, WORD_PROCESSING_XML_NAMESPACE,
 };
 
-#[derive(Debug,  Default)]
+#[derive(Clone, Debug,  Default)]
 pub struct GridColumnDefinition {
     pub width: TwelfteenthPoint<u32>,
 }
@@ -42,7 +42,7 @@ pub struct TableBorderProperties {
     pub inside_vertical: BorderProperties,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct TableGrid(pub Vec<GridColumnDefinition>);
 
 impl FromXmlStandalone for TableGrid {

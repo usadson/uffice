@@ -186,7 +186,7 @@ fn process_body_element(context: &mut Context,
 
     for child in node.children() {
         match child.tag_name().name() {
-            "p" => position = process_paragraph_element(context, parent, &child, position),
+            "p" => position = process_paragraph_element(context, parent, &child, position, None),
             "sdt" => position = process_structured_document_tag_block_level(context, parent, &child, position),
             "tbl" => position = process_table_element(context, parent, &child, position),
             _ => ()
@@ -258,12 +258,22 @@ fn process_hyperlink_element(context: &mut Context,
 fn process_paragraph_element(context: &mut Context,
                              parent: &mut Node,
                              node: &xml::Node,
-                             original_position: Position<f32>) -> Position<f32> {
+                             original_position: Position<f32>,
+                             bounding_box: Option<Rect<f32>>) -> Position<f32> {
     let paragraph_idx = wp::append_child(parent, wp::Node::new(wp::NodeData::Paragraph(wp::Paragraph)));
     let paragraph = &mut parent.nth_child_mut(paragraph_idx);
 
     //position.x = context.page_settings.margins.left as f32 * TWELFTEENTH_POINT;
     let mut line_layout = wp::layout::LineLayout::new(&context.page_settings, original_position.y());
+
+    if let Some(bounding_box) = bounding_box {
+        line_layout.page_horizontal_start = bounding_box.left();
+        line_layout.page_horizontal_end = bounding_box.right();
+        line_layout.page_vertical_start = bounding_box.top();
+        line_layout.page_vertical_end = bounding_box.bottom();
+
+        line_layout.position_on_line = bounding_box.position();
+    }
 
     paragraph.position = line_layout.position_on_line;
     let mut position = line_layout.position_on_line;
@@ -360,7 +370,7 @@ fn process_paragraph_element(context: &mut Context,
     let diff = position - original_position;
     paragraph.size = diff.into();
 
-    position
+    Position::new(original_position.x(), position.y())
 }
 
 // pPr
@@ -503,7 +513,7 @@ fn process_sdt_content_block_level(context: &mut Context, parent: &mut Node, nod
     for child in node.children() {
         // println!("│  │  ├─ {}", child.tag_name().name());
         match child.tag_name().name() {
-            "p" => position = process_paragraph_element(context, parent, &child, position),
+            "p" => position = process_paragraph_element(context, parent, &child, position, None),
             _ => ()
         }
     }
@@ -519,7 +529,7 @@ fn process_sdt_content_non_block_level(context: &mut Context, parent: &mut Node,
     for child in node.children() {
         match child.tag_name().name() {
             "r" => position = process_text_run_element(context, parent, line_layout, &child, position),
-            "p" => position = process_paragraph_element(context, parent, &child, position),
+            "p" => position = process_paragraph_element(context, parent, &child, position, None),
             _ => {
                 #[cfg(debug_assertions)]
                 println!("[WARNING] Unknown element in <w:sdtContent> (non-block): {}", child.tag_name().name());
@@ -611,7 +621,7 @@ fn process_table_element(context: &mut Context, parent: &mut Node, node: &xml::N
     };
 
     let table = wp::append_child(parent, wp::Node::new(wp::NodeData::Table{
-        grid,
+        grid: grid.clone(),
         properties
     }));
 
@@ -621,7 +631,9 @@ fn process_table_element(context: &mut Context, parent: &mut Node, node: &xml::N
         match child.tag_name().name() {
             "tblPr" => (),
             "tblGrid" => (),
-            "tr" => position = process_table_row_element(context, table, &child, position),
+            "tr" => {
+                position = process_table_row_element(context, table, &grid, &child, position);
+            }
             _ => {
                 #[cfg(debug_assertions)]
                 println!("[WARNING] Unknown element in <w:tbl>: {}", child.tag_name().name());
@@ -633,29 +645,37 @@ fn process_table_element(context: &mut Context, parent: &mut Node, node: &xml::N
 }
 
 /// Process the `<w:tr>` element.
-fn process_table_row_element(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
+fn process_table_row_element(context: &mut Context, parent: &mut Node, grid: &TableGrid, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
     let mut position = original_position;
 
     let table_row = wp::append_child(parent, wp::Node::new(wp::NodeData::TableRow));
     let table_row = parent.nth_child_mut(table_row);
 
-    for child in node.children() {
+    let mut column_index = 0;
+    let mut row_height = 0.0;
 
-        match child.tag_name().name() {
-            "trPr" => (), // TODO
-            "tc" => position = process_table_cell_element(context, table_row, &child, position),
-            _ => {
-                #[cfg(debug_assertions)]
-                println!("[WARNING] Unknown element in <w:tr>: {}", child.tag_name().name());
+    for child in node.children() {
+        if child.tag_name().name() == "tc" {
+            let width = grid.0[column_index].width.get_pts();
+            let bounding_box = Rect::from_position_and_size(position, Size::new(width, f32::MAX));
+
+            process_table_cell_element(context, table_row, &child, position.clone(), bounding_box);
+            let height = table_row.children.last().unwrap().size.height();
+            if height > row_height {
+                row_height = height;
             }
+
+            *position.x_mut() += width;
+
+            column_index += 1;
         }
     }
 
-    position
+    Position::new(original_position.x(), original_position.y() + row_height)
 }
 
 /// Process the `<w:tc>` element.
-fn process_table_cell_element(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Position<f32>) -> Position<f32> {
+fn process_table_cell_element(context: &mut Context, parent: &mut Node, node: &xml::Node, original_position: Position<f32>, bounding_box: Rect<f32>) {
     let mut position = original_position;
 
     let table_cell = wp::append_child(parent, wp::Node::new(wp::NodeData::TableCell));
@@ -663,8 +683,16 @@ fn process_table_cell_element(context: &mut Context, parent: &mut Node, node: &x
 
     for child in node.children() {
         match child.tag_name().name() {
-            "tcPr" => (), // TODO
-            "p" => position = process_paragraph_element(context, table_cell, &child, position),
+            "tcPr" => {
+                if let Some(width_xml_node) = child.children().find(|child| child.tag_name().name() == "tcW") {
+                    let width_type = width_xml_node.attribute((WORD_PROCESSING_XML_NAMESPACE, "type")).unwrap_or("dxa");
+                    assert_eq!(width_type, "dxa");
+
+                    let width = width_xml_node.attribute((WORD_PROCESSING_XML_NAMESPACE, "w")).unwrap().parse::<f32>().unwrap() * TWELFTEENTH_POINT;
+                    table_cell.size = Size::new(width, table_cell.size.height());
+                }
+            }
+            "p" => position = process_paragraph_element(context, table_cell, &child, position, Some(bounding_box)),
             "sdt" => {
                 let mut line_layout = wp::layout::LineLayout::new(&context.page_settings, position.y());
                 position = process_structured_document_tag_non_block_level(context, table_cell, &child, position, StructuredDocumentTagLevel::Cell, &mut line_layout);
@@ -676,7 +704,11 @@ fn process_table_cell_element(context: &mut Context, parent: &mut Node, node: &x
         }
     }
 
-    position
+    if table_cell.children.len() == 1 {
+        table_cell.size = table_cell.children.first().unwrap().size;
+    } else {
+        println!("[WARNING] TableCell: Unexpected children count: {}", table_cell.children.len())
+    }
 }
 
 /// Process the w:t element.
