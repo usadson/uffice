@@ -79,6 +79,18 @@ impl<'a> FontSpecification<'a> {
             weight
         }
     }
+
+    pub fn family_name(&self) -> &str {
+        self.family_name
+    }
+
+    pub fn size(&self) -> f32 {
+        self.size
+    }
+
+    pub fn weight(&self) -> FontWeight {
+        self.weight
+    }
 }
 
 /// Specifies the quality of the painter. For example, when a font is currently

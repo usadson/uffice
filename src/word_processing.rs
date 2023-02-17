@@ -782,11 +782,17 @@ pub fn process_text_element_text(parent: &mut Node, line_layout: &mut wp::layout
         None => &*theme.theme_elements.font_scheme.major_font.latin.typeface,
         Some(font) => font,
     };
-    let font_spec = FontSpecification::new(
+    let mut font_spec = FontSpecification::new(
         &family_name, text_settings.non_complex_text_size.unwrap().get_pts(), text_settings.font_weight(),
     );
 
-    let line_spacing = text_calculator.line_spacing(font_spec).unwrap();
+    let line_spacing = match text_calculator.line_spacing(font_spec) {
+        Ok(line_spacing) => line_spacing,
+        Err(..) => {
+            font_spec = FontSpecification::new("Times New Roman", font_spec.size(), font_spec.weight());
+            text_calculator.line_spacing(font_spec).unwrap()
+        }
+    };
 
     let mut iter = UnicodeSegmentation::split_word_bound_indices(text_string).peekable();
     while let Some((index, word)) = iter.next() {

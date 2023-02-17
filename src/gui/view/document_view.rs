@@ -196,7 +196,10 @@ impl DocumentView {
                     wp::NodeData::TextPart(part) => {
                         let text_size = node.text_settings.non_complex_text_size.unwrap().get_pts();
                         let font_family_name = node.text_settings.font.clone().unwrap();
-                        event.painter.select_font(FontSpecification::new(&font_family_name, text_size, node.text_settings.font_weight())).unwrap();
+
+                        if event.painter.select_font(FontSpecification::new(&font_family_name, text_size, node.text_settings.font_weight())).is_err() {
+                            _ = event.painter.select_font(FontSpecification::new("Times New Roman", text_size, node.text_settings.font_weight()));
+                        }
 
                         //let size =
                         event.painter.paint_text(node.text_settings.brush(), position, &part.text, Some(node.size * event.zoom));
