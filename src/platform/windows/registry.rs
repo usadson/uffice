@@ -150,7 +150,8 @@ impl RegistryKey {
 
     pub fn open(key: PredefinedRegistryKey) -> Result<Self, RegistryError> {
         let mut handle: HKEY = Default::default();
-        let result = unsafe { RegOpenKeyExA(key, None, 0, KEY_READ, &mut handle) };
+        let result = unsafe { RegOpenKeyExA(Into::<HKEY>::into(key), None, 0, KEY_READ, &mut handle) };
+
 
         match result {
             ERROR_SUCCESS => Ok(Self{ handle }),
@@ -181,7 +182,7 @@ impl RegistryKey {
 
     pub fn open_subkey(&self, name: &str) -> Result<RegistryKey, RegistryError> {
         let mut handle: HKEY = Default::default();
-        let result = unsafe { RegOpenKeyExA(self.handle, Some(PCSTR(name.as_ptr())), 0, KEY_READ, &mut handle) };
+        let result = unsafe { RegOpenKeyExA(self.handle, PCSTR(name.as_ptr()), 0, KEY_READ, &mut handle) };
 
         match result {
             ERROR_SUCCESS => Ok(Self{ handle }),
@@ -212,7 +213,8 @@ impl RegistryKey {
                 None,
                 Some(&mut value_type),
                 Some(value.as_mut_ptr()),
-                Some(&mut value_length))
+                Some(&mut value_length)
+            )
         };
 
         value.resize(value_length as usize, 0);

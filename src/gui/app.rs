@@ -1,7 +1,19 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use super::{painter::{Painter, win32::Win32Painter}, AppEvent};
+use super::{
+    painter::{Painter, win32::Win32Painter},
+    AppEvent,
+};
+
+use winit::{
+    event::{Event, WindowEvent},
+    event_loop::{EventLoopProxy, EventLoopBuilder},
+    window::{Window, WindowBuilder},
+};
+
+use std::{sync::Arc, cell::{RefCell, RefMut}};
+
 
 /// Get the formatted window title base, the prefix of the window title
 /// excluding the document title/path.
@@ -157,8 +169,7 @@ pub fn run<F>(app_creator: F)
     });
 }
 
-use std::{sync::Arc, cell::{RefCell, RefMut}};
-
+/*
 use bytemuck::{Pod, Zeroable};
 
 use vulkano::{
@@ -191,11 +202,7 @@ use vulkano::{
     VulkanLibrary,
 };
 use vulkano_win::VkSurfaceBuild;
-use winit::{
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop, EventLoopProxy, EventLoopBuilder},
-    window::{Window, WindowBuilder},
-};
+
 
 #[allow(dead_code)]
 pub struct AppOld {
@@ -816,3 +823,4 @@ fn window_size_dependent_setup(
         })
         .collect::<Vec<_>>()
 }
+ */

@@ -1,8 +1,6 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::rc::Rc;
-
 use roxmltree as xml;
 
 use uffice_lib::{profiling::Profiler, profile_expr};
