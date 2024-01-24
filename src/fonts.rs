@@ -1,7 +1,7 @@
 // Copyright (C) 2022 - 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::path::{PathBuf, Path};
+use std::path::PathBuf;
 
 /// Looks for fonts in the given directories.
 pub struct DirectoryFontSource {
@@ -129,10 +129,12 @@ impl font_kit::source::Source for DirectoryFontSource {
 
 /// Generates font sources based on the platform.
 pub fn resolve_font_sources() -> Vec<Box<(dyn font_kit::source::Source + 'static)>> {
+    #[cfg(target_os = "windows")]
     let mut sources = vec![];
 
     #[cfg(target_os = "windows")]
     {
+        use std::path::Path;
         let str = format!("{}\\Microsoft\\FontCache\\4\\CloudFonts", env!("LOCALAPPDATA"));
 
         match Path::new(&str).canonicalize() {
