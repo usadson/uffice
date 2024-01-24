@@ -13,10 +13,8 @@ use std::sync::mpsc::Sender;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
+#[cfg(windows)]
 use windows::Win32::System::Com::CoInitialize;
-use windows::Win32::UI::WindowsAndMessaging::MB_ICONERROR;
-use windows::Win32::UI::WindowsAndMessaging::MB_OK;
-use windows::Win32::UI::WindowsAndMessaging::MessageBoxA;
 use winit::event::ElementState;
 use winit::event::MouseButton;
 use winit::event::VirtualKeyCode;
@@ -570,10 +568,10 @@ impl App {
                     }
                 }
 
-                unsafe {
-                    let message = format!("ID: {}\r\nReason: {:?}", tab_id, tab.crash_reason);
-                    MessageBoxA(None, windows::core::PCSTR(message.as_ptr()), windows::core::PCSTR("Tab Crashed".as_ptr()), MB_ICONERROR | MB_OK);
-                }
+                crate::platform::show_message_box_blocking(
+                    "Tab Crashed",
+                    &format!("ID: {}\r\nReason: {:?}", tab_id, tab.crash_reason),
+                );
             }
 
             AppEvent::PainterRequest => ()

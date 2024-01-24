@@ -16,15 +16,21 @@ use windows::{
         },
         UI::{
             Shell::ShellExecuteW,
-            WindowsAndMessaging::SW_SHOWNORMAL,
+            WindowsAndMessaging::{
+                MB_ICONERROR,
+                MB_OK,
+                MessageBoxA,
+                SW_SHOWNORMAL,
+            },
         },
         System::LibraryLoader::{
             GetProcAddress,
             LoadLibraryA,
         },
-        System::{Threading::{
-            GetCurrentThread,
-        }, Recovery::RegisterApplicationRestart},
+        System::{
+            Threading::GetCurrentThread,
+            Recovery::RegisterApplicationRestart,
+        },
     },
 };
 
@@ -103,5 +109,11 @@ pub fn save_restore_arguments(arguments: crate::CommandLineArguments) {
     #[cfg(debug_assertions)]
     if let Err(err) = result {
         println!("[Win32] Failed to register application restart: {:?}", err);
+    }
+}
+
+pub fn show_message_box_blocking(title: &str, message: &str) {
+    unsafe {
+        MessageBoxA(None, windows::core::PCSTR(message.as_ptr()), windows::core::PCSTR(title.as_ptr()), MB_ICONERROR | MB_OK);
     }
 }
