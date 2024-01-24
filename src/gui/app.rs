@@ -2,9 +2,15 @@
 // All Rights Reserved.
 
 use super::{
-    painter::{Painter, win32::Win32Painter},
+    painter::Painter,
     AppEvent,
 };
+
+#[cfg(target_os = "macos")]
+use super::painter::macos::MacOSPainter;
+
+#[cfg(windows)]
+use super::painter::win32::Win32Painter;
 
 use winit::{
     event::{Event, WindowEvent},
@@ -46,7 +52,13 @@ struct GuiAppData {
 }
 
 fn create_painter(window: &mut Window) -> Arc<RefCell<dyn Painter>> {
-    Arc::new(RefCell::new(Win32Painter::new(window).expect("Failed to create painter")))
+    #[cfg(windows)]
+    let painter = Win32Painter::new(window).expect("Failed to create painter");
+
+    #[cfg(target_os = "macos")]
+    let painter = MacOSPainter::new(window).expect("Failed to create painter");
+
+    Arc::new(RefCell::new(painter))
 }
 
 impl GuiAppData {

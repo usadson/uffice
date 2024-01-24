@@ -5,6 +5,9 @@ use std::{cell::RefCell, rc::Rc};
 use bitflags::bitflags;
 use super::{Brush, Rect, Position, Size};
 
+#[cfg(target_os = "macos")]
+pub mod macos;
+
 #[cfg(windows)]
 pub mod win32;
 
